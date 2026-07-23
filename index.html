@@ -4284,6 +4284,14 @@ function renderZZOllas() {
   tieneResto = borrador ? (borrador.tieneResto ?? null) : null;
 
   const maquinasNecesariasOllas = calcularMaquinasNecesarias(p);
+  const syncOllaBanner = (() => {
+    if (!STATE.zzUltimoSyncOlla) return '';
+    const estado = STATE.zzUltimoSyncOlla;
+    STATE.zzUltimoSyncOlla = null; // se muestra una sola vez, justo después de confirmar
+    if (estado === 'ok') return `<div class="alert alert-green" style="margin-bottom:14px;"><div class="alert-icon">✅</div><div class="alert-body"><div class="alert-title">Olla sincronizada con SharePoint</div></div></div>`;
+    if (estado === 'desconectado') return `<div class="alert alert-orange" style="margin-bottom:14px;"><div class="alert-icon">⚪</div><div class="alert-body"><div class="alert-title">No conectado a SharePoint</div><div class="alert-text">La olla quedó guardada solo en este dispositivo.</div></div></div>`;
+    return `<div class="alert alert-orange" style="margin-bottom:14px;"><div class="alert-icon">⚠️</div><div class="alert-body"><div class="alert-title">No se pudo sincronizar la olla con SharePoint</div><div class="alert-text">Quedó guardada en este dispositivo. Revisá la consola (F12) para más detalle.</div></div></div>`;
+  })();
   return `
   <div class="page-header">
     <div class="page-title" style="font-size:20px;">${ICON_OLLA} Preparar Ollas</div>
@@ -4292,6 +4300,7 @@ function renderZZOllas() {
     <div style="margin-top:6px;"><span class="pill pill-purple" style="font-size:15px;font-weight:800;padding:6px 14px;">${codigoLotePorIndice(ollaN)}</span></div>
   </div>
 
+  ${syncOllaBanner}
   ${renderOtrosLotesEnCurso('zz_ollas')}
 
   <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:14px;">
@@ -4692,7 +4701,7 @@ function checkAllDesvios() {
   }
 }
 
-function confirmarOlla() {
+async function confirmarOlla() {
   const tempEsencia = parseFloat(document.getElementById('tempOlla')?.value);
   const resto = tieneResto ? (parseFloat(document.getElementById('restoKg')?.value) || 0) : 0;
   const p = STATE.zzPrograma;
@@ -4769,7 +4778,7 @@ function confirmarOlla() {
   const mpAnilina1 = buscarMP(/anilina.?1|^anilina$/i);
   const mpAnilina2 = buscarMP(/anilina.?2/i);
   const loteIdOlla = loteActualProduccion();
-  spAddItem('ollasZZ', {
+  const syncOlla = await spAddItem('ollasZZ', {
     Title: `OLLA-${STATE.zzFecha?.replace(/-/g,'')}-${p.sku.slice(-4)}-${numeroConfirmada.toString().padStart(2,'0')}`,
     Fecha: STATE.zzFecha,
     Operario: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
@@ -4787,6 +4796,7 @@ function confirmarOlla() {
     Anilina2Lote: mpAnilina2?.lote || '', Anilina2Cantidad: String(mpAnilina2?.real || 0),
     KgTotalesArtcolla: String(kgTotal), TC: String(tempEsencia), SobranteKg: String(resto),
   });
+  STATE.zzUltimoSyncOlla = !STATE.spConectado ? 'desconectado' : (syncOlla === null ? 'error' : 'ok');
 
   // Si hay otra olla en progreso (empezada pero no confirmada), seguir ahí;
   // si no, arrancar una nueva.
@@ -5175,6 +5185,10 @@ function agregarBachada() {
 
   const rechazos = parseInt(document.getElementById('rechazosInput')?.value) || 0;
   const motivo = document.getElementById('motivoRechazo')?.value || '';
+  if (motivo && rechazos <= 0) {
+    alert('⚠ Elegiste un motivo de rechazo ("' + motivo + '") pero el campo "Rechazos" está en 0.\n\nEscribí la cantidad real de unidades rechazadas para que quede registrado.');
+    return;
+  }
   const hora = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
   STATE.zzBachadas.push({uds, hora, loteId, rechazos, motivo});
   STATE.zzUdsAcumuladas += uds;
