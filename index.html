@@ -788,6 +788,7 @@ async function cargarHistorialDesdeSharePoint() {
         operarioId: parseInt(f.OperarioId) || 0, linea: f.Linea, sku: f.SKU, desc: f.Descripcion,
         cantidad: parseFloat(f.Cantidad) || 0, ot: f.OT, artcolla: f.ARTCOLLA || null,
         kgUni: parseFloat(f.KgUnitario) || 0, fecha: f.Fecha ? f.Fecha.slice(0, 10) : null,
+        filaExcel: (f.FilaExcel !== undefined && f.FilaExcel !== null && f.FilaExcel !== '') ? parseInt(f.FilaExcel) : null,
       });
     }
   });
@@ -4105,15 +4106,15 @@ function letraMesLote(fechaIso) {
 }
 // Prefijo del lote (sin el N° de batch, que se asigna recién al cerrar el lote
 // porque depende de cuántos batches distintos hubo ese día para ese operario)
-// N° de batch: según el orden real del Excel (de abajo hacia arriba) entre los
+// N° de batch: según el orden real del Excel (de arriba hacia abajo) entre los
 // códigos alfa que le tocan a ESE operario/línea ESE mismo día. Como al preparar
 // las ollas se elige un solo lote por insumo, el batch casi siempre es el mismo
 // durante todo el día — por eso alcanza con la posición en la lista del día.
 function calcularNumeroBatch(entry) {
-  if (entry.filaExcel == null) return 1; // datos sin orden de fila (demo, formato largo): batch 1
+  if (entry.filaExcel == null) return 1; // datos sin orden de fila (demo, formato largo viejo): batch 1
   const delMismoDia = STATE.programaZZ
     .filter(p => p.linea === entry.linea && p.fecha === entry.fecha && p.filaExcel != null)
-    .sort((a, b) => b.filaExcel - a.filaExcel); // de abajo (fila mayor) hacia arriba
+    .sort((a, b) => a.filaExcel - b.filaExcel); // de arriba (fila menor) hacia abajo
   // Un número de batch distinto para cada código alfa (SKU) distinto — nunca
   // se comparte el mismo número de lote entre dos SKUs diferentes, aunque se
   // hayan preparado el mismo día en la misma línea.
@@ -6195,6 +6196,7 @@ async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo, nombreArchivo) {
           Title: ot, OperarioId: String(0), Linea: equipo, SKU: sku, Descripcion: detalle,
           Cantidad: String(val), OT: ot, ARTCOLLA: '', KgUnitario: String(0), Fecha: dc.fecha,
           CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
+          FilaExcel: String(r),
         });
       } else {
         if (STATE.programaPkg.some(p => p.linea===equipo && p.sku===sku && p.fecha===dc.fecha)) continue;
@@ -6237,13 +6239,14 @@ async function leerExcelPrograma(inputEl, tipo) {
   const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
   let nuevos = 0;
 
-  for (const row of rows) {
+  for (let r = 0; r < rows.length; r++) {
+    const row = rows[r];
     const fecha = normalizarFechaExcel(row.Fecha);
     if (tipo === 'zz') {
       const entry = {
         operarioId: parseInt(row.OperarioId) || 0, linea: row.Linea, sku: row.SKU, desc: row.Descripcion,
         cantidad: parseFloat(row.Cantidad) || 0, ot: row.OT, artcolla: row.ARTCOLLA || null,
-        kgUni: parseFloat(row.KgUnitario) || 0, fecha, nombreArchivo,
+        kgUni: parseFloat(row.KgUnitario) || 0, fecha, nombreArchivo, filaExcel: r,
       };
       if (!entry.ot || STATE.programaZZ.some(p => p.ot === entry.ot)) continue;
       STATE.programaZZ.push(entry); nuevos++;
@@ -6252,6 +6255,7 @@ async function leerExcelPrograma(inputEl, tipo) {
         Descripcion: entry.desc, Cantidad: String(entry.cantidad), OT: entry.ot,
         ARTCOLLA: entry.artcolla || '', KgUnitario: String(entry.kgUni), Fecha: entry.fecha,
         CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
+        FilaExcel: String(r),
       });
     } else {
       const entry = { linea: row.Linea, sku: row.SKU, desc: row.Descripcion, cantidad: parseFloat(row.Cantidad)||0, turno: row.Turno, ot: row.OT, fecha, nombreArchivo };
