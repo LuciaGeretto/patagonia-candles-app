@@ -782,13 +782,21 @@ async function cargarHistorialDesdeSharePoint() {
     spGetItems('produccionZZ'), spGetItems('produccionPkg'),
   ]);
 
-  progZZ.forEach(f => {
+  progZZ.forEach((f, idx) => {
     if (!STATE.programaZZ.some(p => p.ot === f.OT)) {
+      // Fallback de orden: si SharePoint no trae FilaExcel (columna vacía en la
+      // lista), usamos el índice de llegada (idx) como proxy del orden de arriba
+      // hacia abajo del programa. Sin esto, calcularNumeroBatch() asignaba
+      // siempre batch 1 a todos los SKUs del mismo operario/línea/día, aunque
+      // fueran aromas distintos — este fallback preserva el orden real en vez
+      // de perderlo, para que el N° de batch (/1, /2, ...) sea correcto incluso
+      // si Planning no cargó la columna FilaExcel en SharePoint.
+      const filaExcelExplicita = (f.FilaExcel !== undefined && f.FilaExcel !== null && f.FilaExcel !== '') ? parseInt(f.FilaExcel) : null;
       STATE.programaZZ.push({
         operarioId: parseInt(f.OperarioId) || 0, linea: f.Linea, sku: f.SKU, desc: f.Descripcion,
         cantidad: parseFloat(f.Cantidad) || 0, ot: f.OT, artcolla: f.ARTCOLLA || null,
         kgUni: parseFloat(f.KgUnitario) || 0, fecha: f.Fecha ? f.Fecha.slice(0, 10) : null,
-        filaExcel: (f.FilaExcel !== undefined && f.FilaExcel !== null && f.FilaExcel !== '') ? parseInt(f.FilaExcel) : null,
+        filaExcel: filaExcelExplicita != null ? filaExcelExplicita : idx,
       });
     }
   });
@@ -5372,6 +5380,21 @@ async function confirmarCierre() {
   const rechazosTotales = STATE.zzBachadas.reduce((s,b) => s + (b.rechazos||0), 0);
   const motivosRechazo = [...new Set(STATE.zzBachadas.filter(b => b.rechazos>0 && b.motivo).map(b => b.motivo))].join(', ');
 
+  // Mismos datos que ya se muestran en el resumen previo de "Cerrar Lote ZZ",
+  // para repetirlos acá en "Datos registrados" sin tener que ir a buscarlos.
+  const pResumen = STATE.zzPrograma;
+  const kgUniRealResumen = calcularKgUnitarioReal(pResumen.sku, pResumen.artcolla);
+  const kgUniUsadoResumen = kgUniRealResumen != null ? kgUniRealResumen : pResumen.kgUni;
+  const kgTeoricoResumen = pResumen.cantidad * kgUniUsadoResumen;
+  const kgUsadoResumen = STATE.zzOllasData.reduce((s,o) => s + (o.kgReal != null ? o.kgReal : o.kgTotal), 0);
+  const ollasHechasResumen = STATE.zzOllasData.length;
+  const ollasTeoricoResumen = STATE.zzOllasTotal || Math.ceil(kgTeoricoResumen / 45) || 1;
+  const maquinasResumen = calcularMaquinasNecesarias(pResumen);
+  const tiradasHechasResumen = maquinasResumen ? formatTiradasProgreso(maquinasResumen.exacto * (kgTeoricoResumen > 0 ? kgUsadoResumen / kgTeoricoResumen : 0)) : null;
+  const pesoTeoricoGResumen = pesoTeoricoGramos();
+  const pesoPromedioResumen = STATE.zzPesosRef.length ? STATE.zzPesosRef.reduce((s,pr) => s + pr.g, 0) / STATE.zzPesosRef.length : null;
+  const sobranteKgResumen = tieneSobrante === true ? (parseFloat(document.getElementById('sobranteKg')?.value) || 0) : null;
+
   // Marcar como cerrado — no permite volver a producir
   const clave = STATE.zzPrograma.sku + '_' + STATE.zzFecha;
   if (!STATE.lotesZZCerrados.includes(clave)) STATE.lotesZZCerrados.push(clave);
@@ -5414,23 +5437,32 @@ async function confirmarCierre() {
   document.getElementById('contentArea').innerHTML = `
     <div style="text-align:center;padding:40px 20px;max-width:500px;margin:0 auto;">
       <div style="font-size:56px;margin-bottom:16px;">✅</div>
-      <div style="font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;margin-bottom:4px;">¡Lote cerrado!</div>
-      <div style="font-family:'Rajdhani',monospace;font-size:14px;color:var(--text3);margin-bottom:24px;">${loteId}</div>
+      <div style="font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;margin-bottom:24px;">¡Lote cerrado!</div>
       ${syncBanner}
       <div class="grid-2" style="margin-bottom:16px;">
         <div style="background:var(--purple-light);border-radius:var(--radius-sm);padding:14px;text-align:center;">
           <div style="font-size:11px;color:var(--text3);font-weight:700;">PRODUCIDO</div>
           <div style="font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:var(--purple);">${total.toLocaleString()}</div>
         </div>
-        <div style="background:var(--green-light);border-radius:var(--radius-sm);padding:14px;text-align:center;">
+        <div style="background:${(Math.round(total/STATE.zzPrograma.cantidad*100) < 95) ? 'var(--red-light)' : 'var(--green-light)'};border-radius:var(--radius-sm);padding:14px;text-align:center;">
           <div style="font-size:11px;color:var(--text3);font-weight:700;">CUMPLIMIENTO</div>
-          <div style="font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:var(--green);">${Math.round(total/STATE.zzPrograma.cantidad*100)}%</div>
+          <div style="font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;color:${(Math.round(total/STATE.zzPrograma.cantidad*100) < 95) ? 'var(--red)' : 'var(--green)'};">${Math.round(total/STATE.zzPrograma.cantidad*100)}%</div>
         </div>
       </div>
       <div style="background:var(--surface2);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;text-align:left;font-size:13px;">
-        <div style="font-weight:700;margin-bottom:6px;">📋 Datos registrados</div>
-        <div style="color:var(--text3);">Temperatura uso en máquina (promedio): <strong>${tempUsoPromedio}°C</strong></div>
-        <div style="color:var(--text3);">Ollas: <strong>${STATE.zzOllasData.length}</strong> · Avances: <strong>${STATE.zzBachadas.length}</strong></div>
+        <div style="font-weight:700;margin-bottom:10px;">📋 Datos registrados</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:6px 16px;">
+          <div><span style="color:var(--text3);">Lote:</span> <strong>${loteCodeVisible}</strong></div>
+          <div><span style="color:var(--text3);">Código alfa:</span> <strong>${pResumen.sku}</strong></div>
+          <div style="grid-column:1 / -1;"><span style="color:var(--text3);">Detalle:</span> <strong>${pResumen.desc}</strong></div>
+          <div><span style="color:var(--text3);">Unidades producidas:</span> <strong>${total.toLocaleString()}</strong> <span style="color:var(--text3);">/ ${pResumen.cantidad.toLocaleString()} prog.</span></div>
+          <div><span style="color:var(--text3);">ARTCOLLA usada:</span> <strong>${kgUsadoResumen.toFixed(1)} kg</strong> <span style="color:var(--text3);">/ ${kgTeoricoResumen.toFixed(1)} kg teórico</span></div>
+          <div><span style="color:var(--text3);">Tiradas realizadas:</span> <strong>${maquinasResumen ? tiradasHechasResumen : '—'}</strong> <span style="color:var(--text3);">/ ${maquinasResumen ? maquinasResumen.numero : '—'} teórico</span></div>
+          <div><span style="color:var(--text3);">Ollas armadas:</span> <strong>${ollasHechasResumen}</strong> <span style="color:var(--text3);">/ ${ollasTeoricoResumen} teórico</span></div>
+          <div style="grid-column:1 / -1;"><span style="color:var(--text3);">Peso promedio:</span> <strong>${pesoPromedioResumen != null ? pesoPromedioResumen.toFixed(1)+' g' : 'sin pesajes'}</strong> <span style="color:var(--text3);">/ ${pesoTeoricoGResumen.toFixed(1)} g teórico</span></div>
+          <div><span style="color:var(--text3);">Temperatura uso en máquina (prom.):</span> <strong>${tempUsoPromedio}°C</strong></div>
+          <div><span style="color:var(--text3);">Sobrante de mezcla (ARTCOLLA):</span> <strong>${sobranteKgResumen != null ? sobranteKgResumen.toFixed(1)+' kg' : 'no sobró'}</strong></div>
+        </div>
       </div>
       ${esAceite ? `<div class="alert alert-green" style="text-align:left;margin-bottom:16px;">
         <div class="alert-icon">📄</div>
