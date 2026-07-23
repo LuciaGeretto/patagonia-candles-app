@@ -3542,6 +3542,33 @@ function launchApp() {
   setupTopbar();
   setupSidebar();
   navigateTo(getDefaultView());
+  intentarReconectarSharePoint();
+}
+
+// Cada vez que se entra a la app (con cualquier operario/rol) intenta restablecer
+// en silencio la conexión a SharePoint, usando la sesión de Microsoft que haya
+// quedado guardada en este mismo navegador (localStorage) de una vez anterior
+// en que alguien tocó "Conectar con Microsoft". Así no hace falta que cada
+// operario conecte manualmente — alcanza con que se haya hecho una vez en el
+// dispositivo/navegador que usan.
+async function intentarReconectarSharePoint() {
+  if (STATE.spConectado) return;
+  if (!(await initMsal())) return;
+  const cuentas = msalInstance.getAllAccounts();
+  if (cuentas.length === 0) return;
+  try {
+    const res = await msalInstance.acquireTokenSilent({ scopes: SP_CONFIG.scopes, account: cuentas[0] });
+    graphAccount = res.account;
+    STATE.spConectado = true;
+    STATE.spSyncMsg = 'Sincronizando historial…';
+    renderView(STATE.currentView);
+    await cargarHistorialDesdeSharePoint();
+    STATE.spSyncMsg = null;
+    iniciarPollingLotesMP();
+  } catch (e) {
+    console.warn('No se pudo restablecer automáticamente la sesión de SharePoint:', e);
+  }
+  renderView(STATE.currentView);
 }
 
 function doLogout() {
