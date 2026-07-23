@@ -6503,8 +6503,15 @@ function getDotacionZZSlots(fecha, linea, filasLinea) {
   if (!STATE.dotacionZZSlots) STATE.dotacionZZSlots = {};
   const key = fecha + '|||' + linea;
   if (!STATE.dotacionZZSlots[key]) {
+    // 1° preferencia: operarioId ya cargado en el programa (si alguna carga lo trae).
     const existentes = [...new Set(filasLinea.map(p => p.operarioId).filter(id => id))];
-    STATE.dotacionZZSlots[key] = existentes.length ? existentes : [0];
+    // 2° preferencia: el/los operarios cuya ficha ya tiene esta línea asignada
+    // (STATE.usuarios[].lineas) — es el caso normal de la carga semanal, donde
+    // cada línea "ZZ NOMBRE" ya le pertenece a un operario fijo. Así Planning
+    // no tiene que ir eligiendo uno por uno: ya viene preseleccionado y solo
+    // hace falta confirmar.
+    const porFicha = existentes.length ? [] : STATE.usuarios.filter(u => u.rol === 'operario_zz' && (u.lineas||[]).includes(linea)).map(u => u.id);
+    STATE.dotacionZZSlots[key] = existentes.length ? existentes : (porFicha.length ? porFicha : [0]);
   }
   return STATE.dotacionZZSlots[key];
 }
