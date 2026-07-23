@@ -4871,12 +4871,13 @@ async function confirmarOlla() {
   const mpAnilina1 = pesajes.find(ps => ps.tipo === 'Anilina1');
   const mpAnilina2 = pesajes.find(ps => ps.tipo === 'Anilina2');
   const loteIdOlla = loteActualProduccion();
+  const horaConfirmacion = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit', hour12:false}).replace(':','');
   const syncOlla = await spAddItem('ollasZZ', {
-    Title: `OLLA-${STATE.zzFecha?.replace(/-/g,'')}-${p.sku.slice(-4)}-${numeroConfirmada.toString().padStart(2,'0')}`,
+    Title: `OLLA-${STATE.zzFecha?.replace(/-/g,'')}-${p.sku.slice(-4)}-${numeroConfirmada.toString().padStart(2,'0')}-${horaConfirmacion}`,
     Fecha: STATE.zzFecha,
     Operario: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
     Cod_alfa: p.sku,
-    Lote: loteIdOlla,
+    Lote: loteLabel(loteIdOlla),
     Olla: String(numeroConfirmada),
     DetalleArtcolla: p.artcolla || '',
     RestoKg: String(resto),
