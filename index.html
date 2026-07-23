@@ -6495,25 +6495,103 @@ function renderJefeHistorial() {
 }
 
 // ── JEFE DOTACION — funcional ──
+// Slots de operarios por línea/fecha para ZZ: STATE.dotacionZZSlots['fecha|||linea'] = [operarioId, ...]
+// Se inicializan, la primera vez que se ve una línea/fecha, con los operarios
+// que ya vinieron cargados en el programa (para no partir de cero), o con un
+// slot vacío si no había ninguno todavía.
+function getDotacionZZSlots(fecha, linea, filasLinea) {
+  if (!STATE.dotacionZZSlots) STATE.dotacionZZSlots = {};
+  const key = fecha + '|||' + linea;
+  if (!STATE.dotacionZZSlots[key]) {
+    const existentes = [...new Set(filasLinea.map(p => p.operarioId).filter(id => id))];
+    STATE.dotacionZZSlots[key] = existentes.length ? existentes : [0];
+  }
+  return STATE.dotacionZZSlots[key];
+}
+function agregarSlotDotacionZZ(fecha, linea) {
+  if (!STATE.dotacionZZSlots) STATE.dotacionZZSlots = {};
+  const key = fecha + '|||' + linea;
+  if (!STATE.dotacionZZSlots[key]) STATE.dotacionZZSlots[key] = [0];
+  STATE.dotacionZZSlots[key].push(0);
+  renderView('jefe_dotacion');
+}
+function quitarSlotDotacionZZ(fecha, linea, idx) {
+  const key = fecha + '|||' + linea;
+  STATE.dotacionZZSlots[key].splice(idx, 1);
+  if (STATE.dotacionZZSlots[key].length === 0) STATE.dotacionZZSlots[key] = [0];
+  renderView('jefe_dotacion');
+}
+function actualizarSlotDotacionZZ(fecha, linea, idx, operarioId) {
+  STATE.dotacionZZSlots[fecha + '|||' + linea][idx] = operarioId;
+}
+
+// Confirma la dotación de ZZ: fija el operario principal de cada fila del
+// programa (el primero de la lista de esa línea, para reportes/KPI) y agrega
+// la línea a la lista de líneas visibles de CADA operario seleccionado, para
+// que todos los que se hayan sumado a esa línea vean el programa en su APP.
+function confirmarDotacionZZ(fecha) {
+  const lineas = [...new Set(STATE.programaZZ.filter(p => p.fecha === fecha).map(p => p.linea))];
+  lineas.forEach(linea => {
+    const key = fecha + '|||' + linea;
+    const ids = (STATE.dotacionZZSlots[key] || []).filter(id => id > 0);
+    const principal = ids[0] || 0;
+    STATE.programaZZ.filter(p => p.fecha === fecha && p.linea === linea).forEach(p => { p.operarioId = principal; });
+    ids.forEach(id => {
+      const u = STATE.usuarios.find(o => o.id === id);
+      if (u) { u.lineas = u.lineas || []; if (!u.lineas.includes(linea)) u.lineas.push(linea); }
+    });
+  });
+  alert('✅ Dotación ZZ confirmada. Los operarios verán sus asignaciones actualizadas en la APP.');
+  renderView('jefe_dotacion');
+}
+function confirmarDotacionPkg() {
+  alert('✅ Dotación de Packaging confirmada. Los operarios verán sus asignaciones actualizadas en la APP.');
+  renderView('jefe_dotacion');
+}
+
 function renderJefeDotacion() {
+  const fecha = STATE.dotacionFecha || (STATE.dotacionFecha = hoyLocal());
+  const progDelDia = STATE.programaZZ.filter(p => p.fecha === fecha);
+  const porLinea = {};
+  progDelDia.forEach(p => { (porLinea[p.linea] = porLinea[p.linea] || []).push(p); });
+  const opZZ = STATE.operarios.filter(o => o.rol === 'operario_zz');
+
   return `
-  <div class="page-header"><div class="page-title">👥 Confirmar Dotación</div><div class="page-sub">Ajustá operarios antes del turno</div></div>
+  <div class="page-header">
+    <div class="page-title">👥 Confirmar Dotación</div>
+    <div class="page-sub">Ajustá operarios antes del turno</div>
+    <div class="field" style="max-width:220px;margin-top:10px;">
+      <label>Fecha</label>
+      <input type="date" value="${fecha}" onchange="STATE.dotacionFecha=this.value;renderView('jefe_dotacion')">
+    </div>
+  </div>
 
   <div class="card" style="margin-bottom:14px;">
     <div class="card-header"><div class="card-title">ZZ — Operarios asignados</div></div>
     <div class="card-body">
-      ${STATE.programaZZ.filter(p=>p.fecha==='2025-05-20').map((p,i) => {
-        const op = STATE.operarios.find(o => o.id === p.operarioId);
-        const opZZ = STATE.operarios.filter(o => o.rol === 'operario_zz');
-        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="width:36px;height:36px;border-radius:50%;background:var(--purple-light);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--purple);">${op?.nombre[0]||'?'}</div>
-          <div style="flex:1;"><div style="font-size:12px;color:var(--text3);">${p.linea} · ${p.sku}</div></div>
-          <select onchange="STATE.programaZZ[STATE.programaZZ.findIndex(x=>x.sku==='${p.sku}'&&x.fecha==='2025-05-20')].operarioId=parseInt(this.value);renderView('jefe_dotacion')" style="padding:6px 10px;font-size:13px;border-radius:6px;border:1.5px solid var(--border);">
-            ${opZZ.map(o => `<option value="${o.id}" ${o.id===p.operarioId?'selected':''}>${o.nombre}, ${o.apellido}</option>`).join('')}
-          </select>
-        </div>`;}).join('')}
+      ${Object.keys(porLinea).length === 0 ? `<div style="text-align:center;color:var(--text3);padding:16px;">Sin programa ZZ cargado para ${formatFecha(fecha)}</div>` :
+      Object.entries(porLinea).map(([linea, filas]) => {
+        const skusUnicos = [...new Set(filas.map(p => p.sku))];
+        const slots = getDotacionZZSlots(fecha, linea, filas);
+        return `
+        <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+          <div style="font-family:'Rajdhani',sans-serif;font-size:19px;font-weight:800;color:#222;margin-bottom:2px;">${linea}</div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">Códigos alfa programados hoy: <strong>${skusUnicos.join(', ')}</strong></div>
+          ${slots.map((opId, idx) => `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <div style="width:32px;height:32px;flex-shrink:0;border-radius:50%;background:var(--purple-light);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--purple);font-size:13px;">${STATE.usuarios.find(o=>o.id===opId)?.nombre[0]||'?'}</div>
+            <select onchange="actualizarSlotDotacionZZ('${fecha}','${linea.replace(/'/g,"\\'")}',${idx},parseInt(this.value))" style="flex:1;padding:6px 10px;font-size:13px;border-radius:6px;border:1.5px solid var(--border);">
+              <option value="0">— Sin asignar</option>
+              ${opZZ.map(o => `<option value="${o.id}" ${o.id===opId?'selected':''}>${o.nombre}, ${o.apellido}</option>`).join('')}
+            </select>
+            ${slots.length > 1 ? `<button onclick="quitarSlotDotacionZZ('${fecha}','${linea.replace(/'/g,"\\'")}',${idx})" style="background:none;border:none;color:var(--red);font-size:20px;line-height:1;cursor:pointer;padding:0 6px;">×</button>` : ''}
+          </div>`).join('')}
+          <button onclick="agregarSlotDotacionZZ('${fecha}','${linea.replace(/'/g,"\\'")}')" style="background:none;border:1.5px dashed var(--border);color:var(--purple);font-size:12px;font-weight:700;padding:6px 12px;border-radius:6px;cursor:pointer;margin-top:2px;">+ Agregar operario</button>
+        </div>`;
+      }).join('')}
     </div>
   </div>
+  ${Object.keys(porLinea).length > 0 ? `<button class="btn btn-primary btn-block" style="margin-bottom:24px;" onclick="confirmarDotacionZZ('${fecha}')">✅ Confirmar dotación ZZ</button>` : ''}
 
   <div class="card" style="margin-bottom:14px;">
     <div class="card-header"><div class="card-title">Packaging — Asignaciones</div></div>
@@ -6531,7 +6609,7 @@ function renderJefeDotacion() {
         </div>`;}).join('')}
     </div>
   </div>
-  <button class="btn btn-green btn-block btn-xl" onclick="alert('✅ Dotación confirmada. Los operarios verán sus asignaciones actualizadas en la APP.')">✅ Confirmar dotación del día</button>`;
+  <button class="btn btn-green btn-block btn-xl" onclick="confirmarDotacionPkg()">✅ Confirmar dotación Packaging</button>`;
 }
 
 // ── JEFE EXPORT ──
