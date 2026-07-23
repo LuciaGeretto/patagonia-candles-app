@@ -744,13 +744,18 @@ async function sincronizarLotesMP() {
   if (!STATE.spConectado) return;
   const items = await spGetItems('lotesMP');
   if (!items.length) return; // si la lista está vacía o falló, no pisamos lo que ya había
-  STATE.lotesMP = items.map(f => ({
+  const lotesEsenciaReales = items.map(f => ({
     codigo: f.Codigo, nombre: f.Descripcion, lote: f.Lote || f.Codigo,
     tipo: f.Tipo || 'Esencia', estado: f.Estado || 'Vigente',
     fechaVencimiento: f.FechaVencimiento ? String(f.FechaVencimiento).slice(0,10) : null,
     diasRestantes: f.DiasRestantes != null ? parseInt(f.DiasRestantes) : null,
     observaciones: f.Observaciones || null, proveedor: f.Proveedor || null,
   }));
+  // Soja/Parafina/Aditivo/Anilina todavía no tienen su propio relevamiento real en
+  // SharePoint — se mantienen los de referencia que ya había, y solo se reemplazan
+  // los de Esencia (que sí vienen del Form 65 vía SharePoint).
+  const lotesReferenciaNoEsencia = STATE.lotesMP.filter(l => l.tipo !== 'Esencia');
+  STATE.lotesMP = [...lotesEsenciaReales, ...lotesReferenciaNoEsencia];
 }
 
 // Refresco automático de LotesMP mientras la app está conectada — cada 3 minutos,
