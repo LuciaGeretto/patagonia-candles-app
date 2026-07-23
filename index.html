@@ -3151,6 +3151,21 @@ const FORMULA_ANILINA_POR_ARTCOLLA = {
   "ZZW15Z": {codigo:"INS171", cantidad:1.5e-05, nombre:"ANILINA BEKRO 34-5587"},
 };
 
+// Segunda anilina — solo para los SKUs que llevan dos anilinas distintas
+// (hoja "2 ANILINAS" del Excel de fórmulas). Clave por Cod_alfa (SKU), no por
+// ARTCOLLA, porque así está armada la planilla de origen.
+const FORMULA_ANILINA2_POR_SKU = {
+  "ZZW02VF": {codigo:"INS170", cantidad:8.888888888888889e-05, nombre:"ANILINA BEKRO 60-1127"},
+  "ZZW02SA": {codigo:"INS004", cantidad:1.1111111111111112e-05, nombre:"ANILINA BEKRO 20-1007"},
+  "ZZW36Y": {codigo:"INS006", cantidad:0.0007111111111111111, nombre:"ANILINA BEKRO 4804-40"},
+  "ZZW17VF": {codigo:"INS170", cantidad:8.888888888888889e-05, nombre:"ANILINA BEKRO 60-1127"},
+  "ZZW17SA": {codigo:"INS004", cantidad:1.1111111111111112e-05, nombre:"ANILINA BEKRO 20-1007"},
+  "ZZW01VF": {codigo:"INS170", cantidad:8.888888888888889e-05, nombre:"ANILINA BEKRO 60-1127"},
+  "ZZW01SA": {codigo:"INS004", cantidad:1.1111111111111112e-05, nombre:"ANILINA BEKRO 20-1007"},
+  "ZZW18VF": {codigo:"INS170", cantidad:8.888888888888889e-05, nombre:"ANILINA BEKRO 60-1127"},
+  "ZZW18SA": {codigo:"INS004", cantidad:1.1111111111111112e-05, nombre:"ANILINA BEKRO 20-1007"},
+};
+
 const STATE = {
   spConectado: false,
   spSyncMsg: null,
@@ -4033,7 +4048,11 @@ function calcularNumeroBatch(entry) {
   const delMismoDia = STATE.programaZZ
     .filter(p => p.linea === entry.linea && p.fecha === entry.fecha && p.filaExcel != null)
     .sort((a, b) => b.filaExcel - a.filaExcel); // de abajo (fila mayor) hacia arriba
-  const pos = delMismoDia.findIndex(p => p.sku === entry.sku && p.filaExcel === entry.filaExcel);
+  // Un número de batch distinto para cada código alfa (SKU) distinto — nunca
+  // se comparte el mismo número de lote entre dos SKUs diferentes, aunque se
+  // hayan preparado el mismo día en la misma línea.
+  const skusUnicos = [...new Set(delMismoDia.map(p => p.sku))];
+  const pos = skusUnicos.indexOf(entry.sku);
   return pos >= 0 ? pos + 1 : 1;
 }
 
@@ -4224,7 +4243,12 @@ function construirIngredientesReales(p) {
     });
 
     const anilina = FORMULA_ANILINA_POR_ARTCOLLA[artcollaReal];
-    if (anilina) ingredientes.push({ mp: prefijoInsumo('Anilina', anilina.nombre), codigo: anilina.codigo, tipo: 'Anilina', tol: 2, prop: anilina.cantidad });
+    if (anilina) ingredientes.push({ mp: prefijoInsumo('Anilina', anilina.nombre), codigo: anilina.codigo, tipo: 'Anilina1', tol: 2, prop: anilina.cantidad });
+
+    // Segunda anilina — algunos SKUs (aroma) llevan un segundo color además del
+    // de la fórmula base del ARTCOLLA. Se identifica por SKU, no por ARTCOLLA.
+    const anilina2 = FORMULA_ANILINA2_POR_SKU[p.sku];
+    if (anilina2) ingredientes.push({ mp: prefijoInsumo('Anilina', anilina2.nombre), codigo: anilina2.codigo, tipo: 'Anilina2', tol: 2, prop: anilina2.cantidad });
   } else {
     // Fallback: fórmulas de ejemplo hardcodeadas (solo para los 3 ARTCOLLA demo)
     const props = STATE.proporciones[p.artcolla] || {};
@@ -4752,7 +4776,7 @@ async function confirmarOlla() {
     const real = parseFloat(inp?.value)||0;
     const teo = parseFloat(inp?.dataset.teorico)||0;
     const dev = teo > 0 ? (real-teo)/teo*100 : 0;
-    pesajes.push({ingrediente: ing.mp, teorico:teo, real, dev, lote});
+    pesajes.push({ingrediente: ing.mp, tipo: ing.tipo, teorico:teo, real, dev, lote});
   });
 
   const numeroConfirmada = STATE.zzOllaActual;
@@ -4775,8 +4799,8 @@ async function confirmarOlla() {
   const mpEsencia  = buscarMP(/esenc/i);
   const mpAditivo  = buscarMP(/aditiv/i);
   const mpFiltro   = buscarMP(/filtro/i);
-  const mpAnilina1 = buscarMP(/anilina.?1|^anilina$/i);
-  const mpAnilina2 = buscarMP(/anilina.?2/i);
+  const mpAnilina1 = pesajes.find(ps => ps.tipo === 'Anilina1');
+  const mpAnilina2 = pesajes.find(ps => ps.tipo === 'Anilina2');
   const loteIdOlla = loteActualProduccion();
   const syncOlla = await spAddItem('ollasZZ', {
     Title: `OLLA-${STATE.zzFecha?.replace(/-/g,'')}-${p.sku.slice(-4)}-${numeroConfirmada.toString().padStart(2,'0')}`,
