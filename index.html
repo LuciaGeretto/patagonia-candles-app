@@ -650,13 +650,35 @@ async function spAddItem(listKey, fields) {
     if (!token) { console.error(`spAddItem('${listKey}'): no se pudo obtener token de Graph.`); return null; }
     if (!siteId) { console.error(`spAddItem('${listKey}'): no se pudo resolver el sitio de SharePoint (revisá siteHostname/siteName en SP_CONFIG).`); return null; }
     if (!listId) { console.error(`spAddItem('${listKey}'): no se encontró la lista "${SP_CONFIG.lists[listKey]}" en el sitio (revisá que el nombre coincida exactamente).`); return null; }
-    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`, {
-      method: 'POST',
-      headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ fields }),
-    });
-    if (!r.ok) { console.error(`Error guardando en ${listKey}:`, await r.text()); return null; }
-    return await r.json();
+    let camposActuales = { ...fields };
+    // Reintenta hasta 5 veces quitando, cada vez, una columna que SharePoint
+    // reporte como "no reconocida" (ej. si a la lista todavía no se le agregó
+    // esa columna) — así una columna faltante no tira abajo toda la fila, y el
+    // resto de los datos del programa sí se guarda en SharePoint.
+    for (let intento = 0; intento < 5; intento++) {
+      const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`, {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ fields: camposActuales }),
+      });
+      if (r.ok) return await r.json();
+      const textoError = await r.text();
+      let campoFaltante = null;
+      try {
+        const m = (JSON.parse(textoError)?.error?.message || '').match(/Field '([^']+)' is not recognized/i);
+        if (m) campoFaltante = m[1];
+      } catch (e) { /* no era JSON con ese formato */ }
+      if (campoFaltante && campoFaltante in camposActuales) {
+        console.error(`spAddItem('${listKey}'): la columna "${campoFaltante}" no existe en la lista de SharePoint "${SP_CONFIG.lists[listKey]}" — pedile a IT/Planning que la agregue. Mientras tanto se guarda el resto de los datos sin esa columna.`);
+        const { [campoFaltante]: _omitido, ...resto } = camposActuales;
+        camposActuales = resto;
+        continue; // reintenta sin esa columna
+      }
+      console.error(`Error guardando en ${listKey}:`, textoError);
+      return null;
+    }
+    console.error(`spAddItem('${listKey}'): no se pudo guardar tras varios reintentos quitando columnas no reconocidas.`);
+    return null;
   } catch (e) { console.error(`Error guardando en ${listKey}:`, e); return null; }
 }
 
@@ -6207,6 +6229,7 @@ async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo, nombreArchivo) {
   await reemplazarProgramaPorArchivo(tipo === 'zz' ? 'programaZZ' : 'programaPkg', nombreArchivo);
 
   let nuevos = 0;
+  let syncFallidos = 0;
   for (let r = detalleRowIdx + 1; r < rawRows.length; r++) {
     const row = rawRows[r] || [];
     const equipo = String(row[0] || '').trim(); // columna A = línea/equipo
@@ -6224,26 +6247,33 @@ async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo, nombreArchivo) {
         const ot = siguienteOT('zz');
         const entry = { operarioId: 0, linea: equipo, sku, desc: detalle, cantidad: val, ot, artcolla: null, kgUni: 0, fecha: dc.fecha, filaExcel: r, nombreArchivo };
         STATE.programaZZ.push(entry); nuevos++;
-        await spAddItem('programaZZ', {
+        const syncRes = await spAddItem('programaZZ', {
           Title: ot, OperarioId: String(0), Linea: equipo, SKU: sku, Descripcion: detalle,
           Cantidad: String(val), OT: ot, ARTCOLLA: '', KgUnitario: String(0), Fecha: dc.fecha,
           CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
           FilaExcel: String(r),
         });
+        if (STATE.spConectado && !syncRes) syncFallidos++;
       } else {
         if (STATE.programaPkg.some(p => p.linea===equipo && p.sku===sku && p.fecha===dc.fecha)) continue;
         const ot = siguienteOT('pkg');
         const entry = { linea: equipo, sku, desc: detalle, cantidad: val, turno: 'TM', ot, fecha: dc.fecha, filaExcel: r, nombreArchivo };
         STATE.programaPkg.push(entry); nuevos++;
-        await spAddItem('programaPkg', {
+        const syncRes = await spAddItem('programaPkg', {
           Title: ot, Linea: equipo, SKU: sku, Descripcion: detalle, Cantidad: String(val),
           Turno: 'TM', OT: ot, Fecha: dc.fecha,
           CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
         });
+        if (STATE.spConectado && !syncRes) syncFallidos++;
       }
     }
   }
-  alert(`${nuevos} filas cargadas (formato semanal por equipo/línea)${STATE.spConectado ? ' y sincronizadas con SharePoint.' : ' (local — conectá SharePoint para que se compartan).'}${nombreArchivo ? `\n\nComo el archivo se llama "${nombreArchivo}", si lo volvés a subir con el mismo nombre, esta carga se reemplaza en vez de duplicarse.` : ''}\n\nNota: como esta planilla no trae operario asignado, queda pendiente de completar en "Confirmar Dotación".`);
+  const estadoSync = !STATE.spConectado
+    ? ' (local — conectá SharePoint para que se compartan).'
+    : syncFallidos > 0
+      ? ` — ⚠ ${syncFallidos} de ${nuevos} NO se pudieron sincronizar con SharePoint (revisá la consola del navegador con F12 para más detalle).`
+      : ' y sincronizadas con SharePoint.';
+  alert(`${nuevos} filas cargadas (formato semanal por equipo/línea)${estadoSync}${nombreArchivo ? `\n\nComo el archivo se llama "${nombreArchivo}", si lo volvés a subir con el mismo nombre, esta carga se reemplaza en vez de duplicarse.` : ''}\n\nNota: como esta planilla no trae operario asignado, queda pendiente de completar en "Confirmar Dotación".`);
   renderView('jefe_programa');
 }
 
@@ -6270,6 +6300,7 @@ async function leerExcelPrograma(inputEl, tipo) {
 
   const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
   let nuevos = 0;
+  let syncFallidos = 0;
 
   for (let r = 0; r < rows.length; r++) {
     const row = rows[r];
@@ -6282,25 +6313,32 @@ async function leerExcelPrograma(inputEl, tipo) {
       };
       if (!entry.ot || STATE.programaZZ.some(p => p.ot === entry.ot)) continue;
       STATE.programaZZ.push(entry); nuevos++;
-      await spAddItem('programaZZ', {
+      const syncRes = await spAddItem('programaZZ', {
         Title: entry.ot, OperarioId: String(entry.operarioId), Linea: entry.linea, SKU: entry.sku,
         Descripcion: entry.desc, Cantidad: String(entry.cantidad), OT: entry.ot,
         ARTCOLLA: entry.artcolla || '', KgUnitario: String(entry.kgUni), Fecha: entry.fecha,
         CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
         FilaExcel: String(r),
       });
+      if (STATE.spConectado && !syncRes) syncFallidos++;
     } else {
       const entry = { linea: row.Linea, sku: row.SKU, desc: row.Descripcion, cantidad: parseFloat(row.Cantidad)||0, turno: row.Turno, ot: row.OT, fecha, nombreArchivo };
       if (!entry.ot || STATE.programaPkg.some(p => p.ot === entry.ot)) continue;
       STATE.programaPkg.push(entry); nuevos++;
-      await spAddItem('programaPkg', {
+      const syncRes = await spAddItem('programaPkg', {
         Title: entry.ot, Linea: entry.linea, SKU: entry.sku, Descripcion: entry.desc,
         Cantidad: String(entry.cantidad), Turno: entry.turno, OT: entry.ot, Fecha: entry.fecha,
         CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
       });
+      if (STATE.spConectado && !syncRes) syncFallidos++;
     }
   }
-  alert(`${nuevos} filas cargadas${STATE.spConectado ? ' y sincronizadas con SharePoint.' : ' (local — conectá SharePoint para que se compartan con el resto).'}\n\nSi volvés a subir un archivo con el nombre "${nombreArchivo}", esta carga se reemplaza en vez de duplicarse.`);
+  const estadoSync = !STATE.spConectado
+    ? ' (local — conectá SharePoint para que se compartan con el resto).'
+    : syncFallidos > 0
+      ? ` — ⚠ ${syncFallidos} de ${nuevos} NO se pudieron sincronizar con SharePoint (revisá la consola del navegador con F12 para más detalle).`
+      : ' y sincronizadas con SharePoint.';
+  alert(`${nuevos} filas cargadas${estadoSync}\n\nSi volvés a subir un archivo con el nombre "${nombreArchivo}", esta carga se reemplaza en vez de duplicarse.`);
   renderView('jefe_programa');
 }
 
