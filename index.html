@@ -4919,7 +4919,7 @@ async function confirmarOlla() {
     FiltroLote: mpFiltro?.lote || '', FiltroCantidad: String(mpFiltro?.real || 0),
     Anilina1Lote: mpAnilina1?.lote || '', Anilina1Cantidad: String(mpAnilina1?.real || 0),
     Anilina2Lote: mpAnilina2?.lote || '', Anilina2Cantidad: String(mpAnilina2?.real || 0),
-    KgTotalesArtcolla: kgTotal.toFixed(3), TC: String(tempEsencia), SobranteKg: String(resto),
+    KgTotalesArtcolla: kgReal.toFixed(3), TC: String(tempEsencia), SobranteKg: String(resto),
   });
   STATE.zzUltimoSyncOlla = !STATE.spConectado ? 'desconectado' : (syncOlla === null ? 'error' : 'ok');
 
