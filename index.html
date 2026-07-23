@@ -4775,17 +4775,17 @@ function confirmarOlla() {
     Operario: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
     Cod_alfa: p.sku,
     Lote: loteIdOlla,
-    Olla: numeroConfirmada,
+    Olla: String(numeroConfirmada),
     DetalleArtcolla: p.artcolla || '',
-    RestoKg: resto,
-    ParafinaLote: mpParafina?.lote || '', ParafinaCantidad: mpParafina?.real || 0,
-    SojaLote: mpSoja?.lote || '', SojaCantidad: mpSoja?.real || 0,
-    EsenciaLote: mpEsencia?.lote || '', EsenciaCantidad: mpEsencia?.real || 0,
-    AditivoLote: mpAditivo?.lote || '', AditivoCantidad: mpAditivo?.real || 0,
-    FiltroLote: mpFiltro?.lote || '', FiltroCantidad: mpFiltro?.real || 0,
-    Anilina1Lote: mpAnilina1?.lote || '', Anilina1Cantidad: mpAnilina1?.real || 0,
-    Anilina2Lote: mpAnilina2?.lote || '', Anilina2Cantidad: mpAnilina2?.real || 0,
-    KgTotalesArtcolla: kgTotal, TC: tempEsencia, SobranteKg: resto,
+    RestoKg: String(resto),
+    ParafinaLote: mpParafina?.lote || '', ParafinaCantidad: String(mpParafina?.real || 0),
+    SojaLote: mpSoja?.lote || '', SojaCantidad: String(mpSoja?.real || 0),
+    EsenciaLote: mpEsencia?.lote || '', EsenciaCantidad: String(mpEsencia?.real || 0),
+    AditivoLote: mpAditivo?.lote || '', AditivoCantidad: String(mpAditivo?.real || 0),
+    FiltroLote: mpFiltro?.lote || '', FiltroCantidad: String(mpFiltro?.real || 0),
+    Anilina1Lote: mpAnilina1?.lote || '', Anilina1Cantidad: String(mpAnilina1?.real || 0),
+    Anilina2Lote: mpAnilina2?.lote || '', Anilina2Cantidad: String(mpAnilina2?.real || 0),
+    KgTotalesArtcolla: String(kgTotal), TC: String(tempEsencia), SobranteKg: String(resto),
   });
 
   // Si hay otra olla en progreso (empezada pero no confirmada), seguir ahí;
@@ -5272,9 +5272,9 @@ async function confirmarCierre() {
   const syncProduccion = await spAddItem('produccionZZ', {
     Title: loteId, Lote: loteCodeVisible, Fecha: STATE.zzFecha, Cod_alfa: STATE.zzPrograma.sku,
     Operario: STATE.user.nombre + ' ' + (STATE.user.apellido||''), Linea: STATE.zzPrograma.linea,
-    UnidadesTotales: total, UnidadesProgramadas: STATE.zzPrograma.cantidad,
-    RechazosTotales: rechazosTotales, MotivoRechazos: motivosRechazo,
-    Ollas: STATE.zzOllasData.length, TemperaturaPromedio: tempUsoPromedio, Estado: 'CERRADO',
+    UnidadesTotales: String(total), UnidadesProgramadas: String(STATE.zzPrograma.cantidad),
+    RechazosTotales: String(rechazosTotales), MotivoRechazos: motivosRechazo,
+    Ollas: String(STATE.zzOllasData.length), TemperaturaPromedio: tempUsoPromedio, Estado: 'CERRADO',
   });
 
   // Peso promedio final del lote (una fila por lote, igual que la planilla "Peso")
@@ -5568,8 +5568,8 @@ function cerrarLotePkg() {
   // Sincronizar con SharePoint (no bloquea la UI; si falla, el registro local ya quedó guardado)
   spAddItem('produccionPkg', {
     Title: STATE.pkgLinea + ' · ' + p.sku, Fecha: STATE.pkgFecha, Linea: STATE.pkgLinea, SKU: p.sku,
-    CajasCompletas: cajasComp, CajasIncompletas: cajasInc,
-    UnidadesProducidas: udsReales, UnidadesProgramadas: p.cantidad,
+    CajasCompletas: String(cajasComp), CajasIncompletas: String(cajasInc),
+    UnidadesProducidas: String(udsReales), UnidadesProgramadas: String(p.cantidad),
     LoteZZRecibido: STATE.pkgLoteZZ || '', HoraInicio: STATE.pkgHoraInicio, HoraFin: horaFin,
   });
 
@@ -6078,8 +6078,8 @@ async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo) {
         const entry = { operarioId: 0, linea: equipo, sku, desc: detalle, cantidad: val, ot, artcolla: null, kgUni: 0, fecha: dc.fecha, filaExcel: r };
         STATE.programaZZ.push(entry); nuevos++;
         await spAddItem('programaZZ', {
-          Title: ot, OperarioId: 0, Linea: equipo, SKU: sku, Descripcion: detalle,
-          Cantidad: val, OT: ot, ARTCOLLA: '', KgUnitario: 0, Fecha: dc.fecha,
+          Title: ot, OperarioId: String(0), Linea: equipo, SKU: sku, Descripcion: detalle,
+          Cantidad: String(val), OT: ot, ARTCOLLA: '', KgUnitario: String(0), Fecha: dc.fecha,
           CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
         });
       } else {
@@ -6088,7 +6088,7 @@ async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo) {
         const entry = { linea: equipo, sku, desc: detalle, cantidad: val, turno: 'TM', ot, fecha: dc.fecha, filaExcel: r };
         STATE.programaPkg.push(entry); nuevos++;
         await spAddItem('programaPkg', {
-          Title: ot, Linea: equipo, SKU: sku, Descripcion: detalle, Cantidad: val,
+          Title: ot, Linea: equipo, SKU: sku, Descripcion: detalle, Cantidad: String(val),
           Turno: 'TM', OT: ot, Fecha: dc.fecha,
           CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
         });
@@ -6129,9 +6129,9 @@ async function leerExcelPrograma(inputEl, tipo) {
       if (!entry.ot || STATE.programaZZ.some(p => p.ot === entry.ot)) continue;
       STATE.programaZZ.push(entry); nuevos++;
       await spAddItem('programaZZ', {
-        Title: entry.ot, OperarioId: entry.operarioId, Linea: entry.linea, SKU: entry.sku,
-        Descripcion: entry.desc, Cantidad: entry.cantidad, OT: entry.ot,
-        ARTCOLLA: entry.artcolla || '', KgUnitario: entry.kgUni, Fecha: entry.fecha,
+        Title: entry.ot, OperarioId: String(entry.operarioId), Linea: entry.linea, SKU: entry.sku,
+        Descripcion: entry.desc, Cantidad: String(entry.cantidad), OT: entry.ot,
+        ARTCOLLA: entry.artcolla || '', KgUnitario: String(entry.kgUni), Fecha: entry.fecha,
         CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
       });
     } else {
@@ -6140,7 +6140,7 @@ async function leerExcelPrograma(inputEl, tipo) {
       STATE.programaPkg.push(entry); nuevos++;
       await spAddItem('programaPkg', {
         Title: entry.ot, Linea: entry.linea, SKU: entry.sku, Descripcion: entry.desc,
-        Cantidad: entry.cantidad, Turno: entry.turno, OT: entry.ot, Fecha: entry.fecha,
+        Cantidad: String(entry.cantidad), Turno: entry.turno, OT: entry.ot, Fecha: entry.fecha,
         CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
       });
     }
@@ -6219,7 +6219,7 @@ async function leerExcelEsencias(inputEl) {
       await spAddItem('lotesMP', {
         Title: l.codigo, Codigo: l.codigo, Descripcion: l.nombre, Lote: l.lote,
         Tipo: l.tipo, Estado: l.estado, FechaVencimiento: l.fechaVencimiento,
-        DiasRestantes: l.diasRestantes, Observaciones: l.observaciones, Proveedor: l.proveedor,
+        DiasRestantes: String(l.diasRestantes), Observaciones: l.observaciones, Proveedor: l.proveedor,
       });
     }
   }
