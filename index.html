@@ -677,6 +677,59 @@ async function spGetItems(listKey, filterOData) {
   } catch (e) { console.error(`Error leyendo ${listKey}:`, e); return []; }
 }
 
+// Igual que spGetItems, pero devuelve también el id de cada elemento —
+// necesario para poder borrarlo después con spDeleteItem.
+async function spGetItemsFull(listKey, filterOData) {
+  if (!STATE.spConectado) return [];
+  try {
+    const token = await getGraphToken();
+    const siteId = await spGetSiteId();
+    const listId = await spGetListId(listKey);
+    if (!token || !siteId || !listId) return [];
+    let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=2000`;
+    if (filterOData) url += `&$filter=${encodeURIComponent(filterOData)}`;
+    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    if (!r.ok) { console.error(`Error leyendo ${listKey}:`, await r.text()); return []; }
+    const d = await r.json();
+    return (d.value || []).map(it => ({ id: it.id, fields: it.fields }));
+  } catch (e) { console.error(`Error leyendo ${listKey}:`, e); return []; }
+}
+
+// Borra un elemento puntual de una Lista de SharePoint por su id.
+async function spDeleteItem(listKey, itemId) {
+  if (!STATE.spConectado) return false;
+  try {
+    const token = await getGraphToken();
+    const siteId = await spGetSiteId();
+    const listId = await spGetListId(listKey);
+    if (!token || !siteId || !listId) return false;
+    const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items/${itemId}`, {
+      method: 'DELETE',
+      headers: { Authorization: `Bearer ${token}` },
+    });
+    if (!r.ok && r.status !== 404) { console.error(`Error borrando item ${itemId} de ${listKey}:`, await r.text()); return false; }
+    return true;
+  } catch (e) { console.error(`Error borrando item de ${listKey}:`, e); return false; }
+}
+
+// Antes de re-importar un Excel de programa, borra en SharePoint (y en STATE)
+// todo lo que se haya cargado antes desde un archivo con EXACTAMENTE el mismo
+// nombre — así, si el archivo se vuelve a subir (porque se corrigió algo),
+// reemplaza los datos en vez de duplicarlos.
+async function reemplazarProgramaPorArchivo(listKey, nombreArchivo) {
+  if (!nombreArchivo) return;
+  if (STATE.spConectado) {
+    const filtro = `fields/NombreArchivo eq '${nombreArchivo.replace(/'/g, "''")}'`;
+    const items = await spGetItemsFull(listKey, filtro);
+    for (const it of items) await spDeleteItem(listKey, it.id);
+  }
+  if (listKey === 'programaZZ') {
+    STATE.programaZZ = STATE.programaZZ.filter(p => p.nombreArchivo !== nombreArchivo);
+  } else if (listKey === 'programaPkg') {
+    STATE.programaPkg = STATE.programaPkg.filter(p => p.nombreArchivo !== nombreArchivo);
+  }
+}
+
 // Trae LotesMP desde SharePoint y REEMPLAZA la lista local: es data viva que
 // Planning/Calidad va actualizando en SharePoint (no un log que se acumula).
 async function sincronizarLotesMP() {
@@ -6061,7 +6114,7 @@ function detectarFilaEncabezadoAncho(rawRows) {
   return -1;
 }
 
-async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo) {
+async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo, nombreArchivo) {
   const detalleRowIdx = diaRowIdx + 1;   // "Detalle" va justo debajo de LUNES/MARTES...
   const dateRowIdx = diaRowIdx - 1;      // las fechas van justo arriba
 
@@ -6098,6 +6151,11 @@ async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo) {
     return;
   }
 
+  // Si ya se había subido un archivo con este mismo nombre antes, se borra todo
+  // lo que vino de esa carga anterior (local y en SharePoint) para reemplazarlo
+  // en vez de duplicarlo.
+  await reemplazarProgramaPorArchivo(tipo === 'zz' ? 'programaZZ' : 'programaPkg', nombreArchivo);
+
   let nuevos = 0;
   for (let r = detalleRowIdx + 1; r < rawRows.length; r++) {
     const row = rawRows[r] || [];
@@ -6114,33 +6172,34 @@ async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo) {
       if (tipo === 'zz') {
         if (STATE.programaZZ.some(p => p.linea===equipo && p.sku===sku && p.fecha===dc.fecha)) continue;
         const ot = siguienteOT('zz');
-        const entry = { operarioId: 0, linea: equipo, sku, desc: detalle, cantidad: val, ot, artcolla: null, kgUni: 0, fecha: dc.fecha, filaExcel: r };
+        const entry = { operarioId: 0, linea: equipo, sku, desc: detalle, cantidad: val, ot, artcolla: null, kgUni: 0, fecha: dc.fecha, filaExcel: r, nombreArchivo };
         STATE.programaZZ.push(entry); nuevos++;
         await spAddItem('programaZZ', {
           Title: ot, OperarioId: String(0), Linea: equipo, SKU: sku, Descripcion: detalle,
           Cantidad: String(val), OT: ot, ARTCOLLA: '', KgUnitario: String(0), Fecha: dc.fecha,
-          CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
+          CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
         });
       } else {
         if (STATE.programaPkg.some(p => p.linea===equipo && p.sku===sku && p.fecha===dc.fecha)) continue;
         const ot = siguienteOT('pkg');
-        const entry = { linea: equipo, sku, desc: detalle, cantidad: val, turno: 'TM', ot, fecha: dc.fecha, filaExcel: r };
+        const entry = { linea: equipo, sku, desc: detalle, cantidad: val, turno: 'TM', ot, fecha: dc.fecha, filaExcel: r, nombreArchivo };
         STATE.programaPkg.push(entry); nuevos++;
         await spAddItem('programaPkg', {
           Title: ot, Linea: equipo, SKU: sku, Descripcion: detalle, Cantidad: String(val),
           Turno: 'TM', OT: ot, Fecha: dc.fecha,
-          CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
+          CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
         });
       }
     }
   }
-  alert(`${nuevos} filas nuevas cargadas (formato semanal por equipo/línea)${STATE.spConectado ? ' y sincronizadas con SharePoint.' : ' (local — conectá SharePoint para que se compartan).'}\n\nNota: como esta planilla no trae operario asignado, queda pendiente de completar en "Confirmar Dotación".`);
+  alert(`${nuevos} filas cargadas (formato semanal por equipo/línea)${STATE.spConectado ? ' y sincronizadas con SharePoint.' : ' (local — conectá SharePoint para que se compartan).'}${nombreArchivo ? `\n\nComo el archivo se llama "${nombreArchivo}", si lo volvés a subir con el mismo nombre, esta carga se reemplaza en vez de duplicarse.` : ''}\n\nNota: como esta planilla no trae operario asignado, queda pendiente de completar en "Confirmar Dotación".`);
   renderView('jefe_programa');
 }
 
 async function leerExcelPrograma(inputEl, tipo) {
   const file = inputEl.files[0];
   if (!file) return;
+  const nombreArchivo = file.name;
   const buf = await file.arrayBuffer();
   const wb = XLSX.read(buf, {type:'array'});
   const sheet = wb.Sheets[wb.SheetNames[0]];
@@ -6149,11 +6208,15 @@ async function leerExcelPrograma(inputEl, tipo) {
   const rawRows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
   const headerRowIdx = detectarFilaEncabezadoAncho(rawRows);
   if (headerRowIdx >= 0) {
-    await leerExcelProgramaAncho(rawRows, headerRowIdx, tipo);
+    await leerExcelProgramaAncho(rawRows, headerRowIdx, tipo, nombreArchivo);
     return;
   }
 
   // 2) Formato largo (una fila por OT) — como antes
+  // Si ya se había subido un archivo con este mismo nombre, se reemplaza en
+  // vez de duplicarse (igual que en el formato ancho).
+  await reemplazarProgramaPorArchivo(tipo === 'zz' ? 'programaZZ' : 'programaPkg', nombreArchivo);
+
   const rows = XLSX.utils.sheet_to_json(sheet, {defval:''});
   let nuevos = 0;
 
@@ -6163,7 +6226,7 @@ async function leerExcelPrograma(inputEl, tipo) {
       const entry = {
         operarioId: parseInt(row.OperarioId) || 0, linea: row.Linea, sku: row.SKU, desc: row.Descripcion,
         cantidad: parseFloat(row.Cantidad) || 0, ot: row.OT, artcolla: row.ARTCOLLA || null,
-        kgUni: parseFloat(row.KgUnitario) || 0, fecha,
+        kgUni: parseFloat(row.KgUnitario) || 0, fecha, nombreArchivo,
       };
       if (!entry.ot || STATE.programaZZ.some(p => p.ot === entry.ot)) continue;
       STATE.programaZZ.push(entry); nuevos++;
@@ -6171,20 +6234,20 @@ async function leerExcelPrograma(inputEl, tipo) {
         Title: entry.ot, OperarioId: String(entry.operarioId), Linea: entry.linea, SKU: entry.sku,
         Descripcion: entry.desc, Cantidad: String(entry.cantidad), OT: entry.ot,
         ARTCOLLA: entry.artcolla || '', KgUnitario: String(entry.kgUni), Fecha: entry.fecha,
-        CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
+        CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
       });
     } else {
-      const entry = { linea: row.Linea, sku: row.SKU, desc: row.Descripcion, cantidad: parseFloat(row.Cantidad)||0, turno: row.Turno, ot: row.OT, fecha };
+      const entry = { linea: row.Linea, sku: row.SKU, desc: row.Descripcion, cantidad: parseFloat(row.Cantidad)||0, turno: row.Turno, ot: row.OT, fecha, nombreArchivo };
       if (!entry.ot || STATE.programaPkg.some(p => p.ot === entry.ot)) continue;
       STATE.programaPkg.push(entry); nuevos++;
       await spAddItem('programaPkg', {
         Title: entry.ot, Linea: entry.linea, SKU: entry.sku, Descripcion: entry.desc,
         Cantidad: String(entry.cantidad), Turno: entry.turno, OT: entry.ot, Fecha: entry.fecha,
-        CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
+        CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido||''), NombreArchivo: nombreArchivo || '',
       });
     }
   }
-  alert(`${nuevos} filas nuevas cargadas${STATE.spConectado ? ' y sincronizadas con SharePoint.' : ' (local — conectá SharePoint para que se compartan con el resto).'}`);
+  alert(`${nuevos} filas cargadas${STATE.spConectado ? ' y sincronizadas con SharePoint.' : ' (local — conectá SharePoint para que se compartan con el resto).'}\n\nSi volvés a subir un archivo con el nombre "${nombreArchivo}", esta carga se reemplaza en vez de duplicarse.`);
   renderView('jefe_programa');
 }
 
