@@ -642,12 +642,14 @@ async function spGetListId(listKey) {
 // Guarda un registro en una Lista de SharePoint. Si no hay conexión, no rompe la app:
 // el registro sigue quedando guardado localmente (STATE), solo no se sincroniza.
 async function spAddItem(listKey, fields) {
-  if (!STATE.spConectado) return null;
+  if (!STATE.spConectado) { console.warn(`spAddItem('${listKey}'): no sincronizado — STATE.spConectado es false, el registro solo quedó guardado localmente.`); return null; }
   try {
     const token = await getGraphToken();
     const siteId = await spGetSiteId();
     const listId = await spGetListId(listKey);
-    if (!token || !siteId || !listId) return null;
+    if (!token) { console.error(`spAddItem('${listKey}'): no se pudo obtener token de Graph.`); return null; }
+    if (!siteId) { console.error(`spAddItem('${listKey}'): no se pudo resolver el sitio de SharePoint (revisá siteHostname/siteName en SP_CONFIG).`); return null; }
+    if (!listId) { console.error(`spAddItem('${listKey}'): no se encontró la lista "${SP_CONFIG.lists[listKey]}" en el sitio (revisá que el nombre coincida exactamente).`); return null; }
     const r = await fetch(`https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items`, {
       method: 'POST',
       headers: { Authorization: `Bearer ${token}`, 'Content-Type': 'application/json' },
@@ -5245,7 +5247,7 @@ function actualizarBotonCierre() {
   if (hint && tieneSobrante !== null) hint.textContent = mensaje;
 }
 
-function confirmarCierre() {
+async function confirmarCierre() {
   if (tieneSobrante === null) { alert('Indicá si sobró mezcla o no antes de confirmar el cierre.'); return; }
   if (tieneSobrante === true) {
     const raw = document.getElementById('sobranteKg')?.value?.trim();
@@ -5266,8 +5268,8 @@ function confirmarCierre() {
   STATE.lotesZZRegistros.push({sku: STATE.zzPrograma.sku, fecha: STATE.zzFecha, total, programado: STATE.zzPrograma.cantidad, loteId});
   delete STATE.zzSesiones[STATE.zzPrograma.sku]; // ya cerrado: no queda "en progreso"
 
-  // Sincronizar con SharePoint (no bloquea la UI; si falla, el registro local ya quedó guardado)
-  spAddItem('produccionZZ', {
+  // Sincronizar con SharePoint (si falla, el registro local ya quedó guardado; el resultado se muestra abajo)
+  const syncProduccion = await spAddItem('produccionZZ', {
     Title: loteId, Lote: loteCodeVisible, Fecha: STATE.zzFecha, Cod_alfa: STATE.zzPrograma.sku,
     Operario: STATE.user.nombre + ' ' + (STATE.user.apellido||''), Linea: STATE.zzPrograma.linea,
     UnidadesTotales: total, UnidadesProgramadas: STATE.zzPrograma.cantidad,
@@ -5278,12 +5280,18 @@ function confirmarCierre() {
   // Peso promedio final del lote (una fila por lote, igual que la planilla "Peso")
   if (STATE.zzPesosRef.length > 0) {
     const pesoPromedioFinal = STATE.zzPesosRef.reduce((s,pr) => s + pr.g, 0) / STATE.zzPesosRef.length;
-    spAddItem('pesosZZ', {
+    await spAddItem('pesosZZ', {
       Title: loteId, Fecha: STATE.zzFecha, Operario: STATE.user.nombre + ' ' + (STATE.user.apellido||''),
       Cod_alfa: STATE.zzPrograma.sku, Lote: loteCodeVisible,
       PesoPromedioKg: (pesoPromedioFinal/1000).toFixed(4),
     });
   }
+
+  const syncBanner = !STATE.spConectado
+    ? `<div class="alert alert-orange" style="text-align:left;margin-bottom:16px;"><div class="alert-icon">⚪</div><div class="alert-body"><div class="alert-title">No conectado a SharePoint</div><div class="alert-text">El registro quedó guardado solo en este dispositivo. Pedile a Planning que conecte SharePoint desde este mismo navegador.</div></div></div>`
+    : syncProduccion === null
+      ? `<div class="alert alert-orange" style="text-align:left;margin-bottom:16px;"><div class="alert-icon">⚠️</div><div class="alert-body"><div class="alert-title">No se pudo sincronizar con SharePoint</div><div class="alert-text">El registro quedó guardado en este dispositivo. Revisá la consola del navegador (F12) para más detalle, o avisá a IT.</div></div></div>`
+      : `<div class="alert alert-green" style="text-align:left;margin-bottom:16px;"><div class="alert-icon">✅</div><div class="alert-body"><div class="alert-title">Sincronizado con SharePoint</div></div></div>`;
 
   // Cumplimiento total del operario en el día
   const progDia = STATE.programaZZ.filter(p => p.operarioId === STATE.user.id && p.fecha === STATE.zzFecha);
@@ -5298,6 +5306,7 @@ function confirmarCierre() {
       <div style="font-size:56px;margin-bottom:16px;">✅</div>
       <div style="font-family:'Rajdhani',sans-serif;font-size:28px;font-weight:700;margin-bottom:4px;">¡Lote cerrado!</div>
       <div style="font-family:'Rajdhani',monospace;font-size:14px;color:var(--text3);margin-bottom:24px;">${loteId}</div>
+      ${syncBanner}
       <div class="grid-2" style="margin-bottom:16px;">
         <div style="background:var(--purple-light);border-radius:var(--radius-sm);padding:14px;text-align:center;">
           <div style="font-size:11px;color:var(--text3);font-weight:700;">PRODUCIDO</div>
