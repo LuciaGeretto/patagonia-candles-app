@@ -5398,7 +5398,7 @@ async function confirmarCierre() {
   // Marcar como cerrado — no permite volver a producir
   const clave = STATE.zzPrograma.sku + '_' + STATE.zzFecha;
   if (!STATE.lotesZZCerrados.includes(clave)) STATE.lotesZZCerrados.push(clave);
-  STATE.lotesZZRegistros.push({sku: STATE.zzPrograma.sku, fecha: STATE.zzFecha, total, programado: STATE.zzPrograma.cantidad, loteId});
+  STATE.lotesZZRegistros.push({sku: STATE.zzPrograma.sku, fecha: STATE.zzFecha, total, programado: STATE.zzPrograma.cantidad, loteId: loteCodeVisible});
   delete STATE.zzSesiones[STATE.zzPrograma.sku]; // ya cerrado: no queda "en progreso"
 
   // Sincronizar con SharePoint (si falla, el registro local ya quedó guardado; el resultado se muestra abajo)
