@@ -554,7 +554,7 @@ let graphAccount = null;
 let spSiteId = null;
 const spListIds = {};
 
-function initMsal() {
+async function initMsal() {
   if (!spConfigured() || !window.msal) return false;
   if (msalInstance) return true;
   msalInstance = new msal.PublicClientApplication({
@@ -565,6 +565,9 @@ function initMsal() {
     },
     cache: { cacheLocation: 'localStorage' },
   });
+  // Requisito de msal-browser v3: hay que inicializar antes de usar cualquier
+  // otra API (loginPopup, acquireTokenSilent, etc.) o tira "uninitialized_public_client_application".
+  await msalInstance.initialize();
   return true;
 }
 
@@ -573,7 +576,7 @@ async function conectarSharePoint() {
     alert('Falta configurar SP_CONFIG (tenantId / clientId / sitio) en el código. Consultá con IT — ver instructivo.');
     return;
   }
-  if (!initMsal()) { alert('No se pudo cargar MSAL (revisá conexión a internet).'); return; }
+  if (!(await initMsal())) { alert('No se pudo cargar MSAL (revisá conexión a internet).'); return; }
   try {
     const res = await msalInstance.loginPopup({ scopes: SP_CONFIG.scopes });
     graphAccount = res.account;
