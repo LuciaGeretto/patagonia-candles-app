@@ -832,12 +832,16 @@ async function cargarHistorialDesdeSharePoint() {
   });
   prodZZ.forEach(f => {
     if (!STATE.lotesZZRegistros.some(r => r.loteId === f.Lote)) {
+      // Los nombres de campo que la app usa al GUARDAR el cierre de un lote ZZ
+      // (ver confirmarCierre: Cod_alfa, UnidadesTotales, Operario, Linea) no son
+      // los mismos que se leían acá (antes: f.SKU, f.UnidadesProducidas) — por
+      // eso cierres reales aparecían con SKU "undefined" y Producido en 0.
       STATE.lotesZZRegistros.push({
-        sku: f.SKU, fecha: f.Fecha ? f.Fecha.slice(0, 10) : null,
-        total: parseFloat(f.UnidadesProducidas) || 0, programado: parseFloat(f.UnidadesProgramadas) || 0,
-        loteId: f.Lote,
+        sku: f.Cod_alfa, fecha: f.Fecha ? f.Fecha.slice(0, 10) : null,
+        total: parseFloat(f.UnidadesTotales) || 0, programado: parseFloat(f.UnidadesProgramadas) || 0,
+        loteId: f.Lote, operario: f.Operario || null, linea: f.Linea || null,
       });
-      const clave = f.SKU + '_' + (f.Fecha ? f.Fecha.slice(0, 10) : null);
+      const clave = f.Cod_alfa + '_' + (f.Fecha ? f.Fecha.slice(0, 10) : null);
       if (!STATE.lotesZZCerrados.includes(clave)) STATE.lotesZZCerrados.push(clave);
     }
   });
@@ -5420,7 +5424,7 @@ async function confirmarCierre() {
   // Marcar como cerrado — no permite volver a producir
   const clave = STATE.zzPrograma.sku + '_' + STATE.zzFecha;
   if (!STATE.lotesZZCerrados.includes(clave)) STATE.lotesZZCerrados.push(clave);
-  STATE.lotesZZRegistros.push({sku: STATE.zzPrograma.sku, fecha: STATE.zzFecha, total, programado: STATE.zzPrograma.cantidad, loteId: loteCodeVisible});
+  STATE.lotesZZRegistros.push({sku: STATE.zzPrograma.sku, fecha: STATE.zzFecha, total, programado: STATE.zzPrograma.cantidad, loteId: loteCodeVisible, operario: STATE.user.nombre + ' ' + (STATE.user.apellido||''), linea: STATE.zzPrograma.linea});
   delete STATE.zzSesiones[STATE.zzPrograma.sku]; // ya cerrado: no queda "en progreso"
 
   // Sincronizar con SharePoint (si falla, el registro local ya quedó guardado; el resultado se muestra abajo)
@@ -6432,7 +6436,7 @@ function renderJefeHistorial() {
     return true;
   };
 
-  const filasZZ = STATE.lotesZZRegistros.filter(r => pasaFiltro(r.fecha, r.sku, r.loteId)).sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
+  const filasZZ = STATE.lotesZZRegistros.filter(r => pasaFiltro(r.fecha, r.sku, r.linea)).sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
   const filasPkg = STATE.lotesPkgRegistros.filter(r => pasaFiltro(r.fecha, r.sku, r.linea)).sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
 
   return `
@@ -6453,16 +6457,17 @@ function renderJefeHistorial() {
     <div class="card-header"><div class="card-title">Producción ZZ (${filasZZ.length})</div></div>
     <div class="card-body" style="overflow-x:auto;">
       <table class="tbl">
-        <thead><tr><th>Fecha</th><th>Lote</th><th>SKU</th><th>Producido</th><th>Programado</th><th>Cumpl.</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Lote</th><th>SKU</th><th>Operario</th><th>Línea</th><th>Producido</th><th>Programado</th><th>Cumpl.</th></tr></thead>
         <tbody>
           ${filasZZ.length ? filasZZ.map(r => {
             const pct = r.programado ? Math.round(r.total/r.programado*100) : 0;
             return `<tr>
               <td>${formatFecha(r.fecha)}</td><td class="mono">${r.loteId||'—'}</td><td>${r.sku}</td>
+              <td>${r.operario||'—'}</td><td>${r.linea||'—'}</td>
               <td>${r.total.toLocaleString()}</td><td>${r.programado.toLocaleString()}</td>
               <td style="color:${pct>=100?'var(--green)':pct>=80?'var(--orange)':'var(--red)'};font-weight:700;">${pct}%</td>
             </tr>`;
-          }).join('') : `<tr><td colspan="6" style="text-align:center;color:var(--text3);padding:16px;">Sin registros para este filtro</td></tr>`}
+          }).join('') : `<tr><td colspan="8" style="text-align:center;color:var(--text3);padding:16px;">Sin registros para este filtro</td></tr>`}
         </tbody>
       </table>
     </div>
