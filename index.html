@@ -5255,7 +5255,8 @@ async function confirmarCierre() {
   }
   const total = STATE.zzBachadas.reduce((s,b) => s + b.uds, 0);
   if (total === 0) { alert('No podés cerrar un lote sin producción. Cargá al menos un avance de producción.'); return; }
-  const loteId = `ZZ-${STATE.zzFecha?.replace(/-/g,'')}-${STATE.zzPrograma.linea.slice(0,2).replace(' ','')}-001`;
+  const horaCierre = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'}).replace(':','');
+  const loteId = `ZZ-${STATE.zzFecha?.replace(/-/g,'')}-${STATE.zzPrograma.sku}-${horaCierre}`;
   const loteCodeVisible = loteLabel(loteActualProduccion());
   const esAceite = STATE.zzPrograma.sku.includes('ACEIT');
   const tempUsoPromedio = STATE.zzOllasData.length > 0 ? (STATE.zzOllasData.reduce((s,o)=>s+o.temp,0)/STATE.zzOllasData.length).toFixed(1) : '—';
