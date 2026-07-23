@@ -670,7 +670,9 @@ async function spGetItems(listKey, filterOData) {
     if (!token || !siteId || !listId) return [];
     let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=500`;
     if (filterOData) url += `&$filter=${encodeURIComponent(filterOData)}`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
+    const headers = { Authorization: `Bearer ${token}` };
+    if (filterOData) headers['Prefer'] = 'HonorNonIndexedQueriesWarningMayFailRandomly';
+    const r = await fetch(url, { headers });
     if (!r.ok) { console.error(`Error leyendo ${listKey}:`, await r.text()); return []; }
     const d = await r.json();
     return (d.value || []).map(it => it.fields);
@@ -688,8 +690,13 @@ async function spGetItemsFull(listKey, filterOData) {
     if (!token || !siteId || !listId) return [];
     let url = `https://graph.microsoft.com/v1.0/sites/${siteId}/lists/${listId}/items?expand=fields&$top=2000`;
     if (filterOData) url += `&$filter=${encodeURIComponent(filterOData)}`;
-    const r = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
-    if (!r.ok) { console.error(`Error leyendo ${listKey}:`, await r.text()); return []; }
+    // Header obligatorio de Graph para poder filtrar por una columna que no está
+    // indexada en SharePoint (como NombreArchivo) — sin esto, el filtro falla
+    // en silencio y devuelve 0 resultados aunque sí haya coincidencias.
+    const headers = { Authorization: `Bearer ${token}` };
+    if (filterOData) headers['Prefer'] = 'HonorNonIndexedQueriesWarningMayFailRandomly';
+    const r = await fetch(url, { headers });
+    if (!r.ok) { console.error(`Error leyendo ${listKey} (filtro: ${filterOData || 'ninguno'}):`, await r.text()); return []; }
     const d = await r.json();
     return (d.value || []).map(it => ({ id: it.id, fields: it.fields }));
   } catch (e) { console.error(`Error leyendo ${listKey}:`, e); return []; }
@@ -721,6 +728,7 @@ async function reemplazarProgramaPorArchivo(listKey, nombreArchivo) {
   if (STATE.spConectado) {
     const filtro = `fields/NombreArchivo eq '${nombreArchivo.replace(/'/g, "''")}'`;
     const items = await spGetItemsFull(listKey, filtro);
+    console.log(`reemplazarProgramaPorArchivo('${listKey}', '${nombreArchivo}'): ${items.length} fila(s) previa(s) encontradas para borrar.`);
     for (const it of items) await spDeleteItem(listKey, it.id);
   }
   if (listKey === 'programaZZ') {
