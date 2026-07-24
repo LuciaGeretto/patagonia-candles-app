@@ -542,6 +542,7 @@ const SP_CONFIG = {
     pesosZZ:       'Historial_PesosZZ',
     lotesMP:       'LotesMP',
     dispositivos:  'Historial_DispositivosConectados',
+    usuarios:      'Usuarios',
   },
   scopes: ['Sites.ReadWrite.All'],
 };
@@ -847,10 +848,56 @@ function detenerPollingLotesMP() {
   if (spPollHandle) { clearInterval(spPollHandle); spPollHandle = null; }
 }
 
+// Convierte un usuario de STATE al formato de campos que espera la lista
+// "Usuarios" en SharePoint (todo como texto, como el resto de las listas).
+function usuarioASpFields(u) {
+  return {
+    Title:     (u.nombre || '') + ' ' + (u.apellido || ''),
+    Nombre:    u.nombre || '',
+    Apellido:  u.apellido || '',
+    Login:     u.usuario || '',
+    Password:  u.password || '',
+    Rol:       u.rol || '',
+    Area:      u.area || '',
+    Lineas:    (u.lineas || []).join(', '),
+    Activo:    String(!!u.activo),
+    Legajo:    u.legajo || '',
+    Iniciales: u.iniciales || '',
+  };
+}
+
+// Trae la lista real de usuarios desde SharePoint y REEMPLAZA los de prueba —
+// pero solo si en SharePoint ya hay al menos un usuario cargado (si la lista
+// está vacía todavía, se mantienen los de prueba hasta que cargues los tuyos
+// reales desde "Usuarios y Accesos"). El id que usa la app internamente pasa
+// a ser el id que le asigna SharePoint a cada fila, para que quede estable
+// entre sesiones (es el mismo id que ya se usa para asignar operarios en el
+// programa, dotación, etc.).
+async function cargarUsuariosDesdeSharePoint() {
+  if (!STATE.spConectado) return;
+  const items = await spGetItemsFull('usuarios');
+  if (!items.length) return;
+  STATE.usuarios = items.map(it => ({
+    id: it.id,
+    _sp: true,
+    nombre:    it.fields.Nombre || '',
+    apellido:  it.fields.Apellido || '',
+    usuario:   it.fields.Login || '',
+    password:  it.fields.Password || '',
+    rol:       it.fields.Rol || 'operario_zz',
+    area:      it.fields.Area || '',
+    lineas:    it.fields.Lineas ? it.fields.Lineas.split(',').map(s=>s.trim()).filter(Boolean) : [],
+    activo:    it.fields.Activo === 'true' || it.fields.Activo === true,
+    legajo:    it.fields.Legajo || '',
+    iniciales: it.fields.Iniciales || '',
+  }));
+}
+
 // Trae el historial completo (programado + producción) desde SharePoint y lo
 // fusiona con lo que ya hay en STATE, sin duplicar por OT/loteId.
 async function cargarHistorialDesdeSharePoint() {
   await sincronizarLotesMP();
+  await cargarUsuariosDesdeSharePoint();
   const [progZZ, progPkg, prodZZ, prodPkg] = await Promise.all([
     spGetItems('programaZZ'), spGetItems('programaPkg'),
     spGetItems('produccionZZ'), spGetItems('produccionPkg'),
@@ -3442,10 +3489,7 @@ const STATE = {
     {id:"ZZ-20250520-L3-001", sku:"ZZA32BR", operario:"Fernández P.", uds:7200, prog:10752, estado:"EN CURSO", ollas:3},
   ],
 
-  liberacionesPendientes: [
-    {linea:"Mesa Pack Manual 1", operario:"Díaz C.", sku:"ZZA02MV", loteZZ:"ZZ-20250520-L8-001", hora:"13:05"},
-    {linea:"Horno", operario:"Paz S.", sku:"ZZA07BR", loteZZ:"ZZ-20250520-L8-002", hora:"13:12"},
-  ],
+  liberacionesPendientes: [],
 
   alertas: [],
 
@@ -3985,7 +4029,9 @@ function renderZZInicio() {
   const hoy = hoyLocal();
   const prog = STATE.programaZZ.filter(p =>
     p.fecha === hoy &&
-    (p.operarioId === STATE.user.id || (STATE.user.lineas||[]).includes(p.linea))
+    (p.operarioId === STATE.user.id
+      || (STATE.user.lineas||[]).includes(p.linea)
+      || (STATE.dotacionZZSlots?.[hoy + '|||' + p.linea] || []).includes(STATE.user.id))
   );
 
   // Agrupar por línea, luego por SKU dentro de cada línea — ordenados por
@@ -5591,7 +5637,12 @@ function idsDotacionPkg(fecha, linea, pkgsLinea) {
 // de "elegir línea" (el operario ya sabe en qué línea está: es su usuario) ──
 function renderPkgInicio() {
   const hoy = hoyLocal(); // el día SIEMPRE es hoy — no es seleccionable por el operario
-  const misLineas = (STATE.user?.lineas || []).length ? STATE.user.lineas : [];
+  // Líneas permanentes del perfil + líneas donde Planning lo sumó SOLO para hoy
+  // (dotacionPkgSlots) sin que eso le quede pegado al perfil para siempre.
+  const lineasDeHoy = Object.entries(STATE.dotacionPkgSlots || {})
+    .filter(([key, ids]) => key.startsWith(hoy + '|||') && ids.includes(STATE.user.id))
+    .map(([key]) => key.slice((hoy + '|||').length));
+  const misLineas = [...new Set([...(STATE.user?.lineas || []), ...lineasDeHoy])];
 
   return `
   <div class="page-header">
@@ -5621,7 +5672,7 @@ function renderPkgInicio() {
           <div><div class="sku-code">${p.sku}</div><div class="sku-desc" style="font-size:15px;font-weight:700;margin-top:2px;">${p.desc}</div></div>
           <div class="sku-qty">${p.cantidad.toLocaleString()} uni</div>
         </div>
-        <div style="font-size:12px;color:var(--text3);">${p.ot}${cerrado ? ' · <span style="color:var(--green);font-weight:700;">✓ CERRADO</span>' : ''}</div>
+        ${cerrado ? `<div style="font-size:12px;color:var(--green);font-weight:700;">✓ CERRADO</div>` : ''}
       </div>`;
     }).join('')}
     `;
@@ -6668,10 +6719,10 @@ function confirmarDotacionZZ(fecha) {
     const ids = (STATE.dotacionZZSlots[key] || []).filter(id => id > 0);
     const principal = ids[0] || 0;
     STATE.programaZZ.filter(p => p.fecha === fecha && p.linea === linea).forEach(p => { p.operarioId = principal; });
-    ids.forEach(id => {
-      const u = STATE.usuarios.find(o => o.id === id);
-      if (u) { u.lineas = u.lineas || []; if (!u.lineas.includes(linea)) u.lineas.push(linea); }
-    });
+    // NOTA: a propósito NO se toca u.lineas (perfil permanente del operario) —
+    // asignar a alguien un día puntual no debe quedarle pegado para siempre.
+    // Los operarios de ese día ven el programa igual gracias a dotacionZZSlots
+    // (ver filtro en renderZZInicio).
   });
   alert('✅ Dotación ZZ confirmada. Los operarios verán sus asignaciones actualizadas en la APP.');
   renderView('jefe_dotacion');
@@ -6720,10 +6771,10 @@ function confirmarDotacionPkg(fecha) {
     const ids = (STATE.dotacionPkgSlots[key] || []).filter(id => id > 0);
     const principal = ids[0] || 0;
     STATE.programaPkg.filter(p => p.fecha === fecha && p.linea === linea).forEach(p => { p.operarioId = principal; });
-    ids.forEach(id => {
-      const u = STATE.usuarios.find(o => o.id === id);
-      if (u) { u.lineas = u.lineas || []; if (!u.lineas.some(l => lineaEq(l, linea))) u.lineas.push(linea); }
-    });
+    // NOTA: igual que en ZZ, a propósito NO se toca u.lineas — una ayuda
+    // puntual de un día no debe quedar pegada para siempre al perfil del
+    // operario. Ese día lo ve igual gracias a dotacionPkgSlots (ver
+    // renderPkgInicio).
   });
   alert('✅ Dotación Packaging confirmada. Los operarios verán sus asignaciones actualizadas en la APP.');
   renderView('jefe_dotacion');
@@ -7217,13 +7268,20 @@ function abrirModalEditar(id) {
 function agregarUsuario() { abrirModalNuevo(); }
 function editarUsuario(id) { abrirModalEditar(id); }
 
-function toggleActivo(id) {
+async function toggleActivo(id) {
   const u = STATE.usuarios.find(x => x.id === id);
-  if (u) { u.activo = !u.activo; renderView('admin_usuarios'); }
+  if (!u) return;
+  u.activo = !u.activo;
+  renderView('admin_usuarios');
+  if (!STATE.spConectado) return;
+  if (u._sp) await spDeleteItem('usuarios', u.id); // ya existía en SharePoint: se reemplaza
+  const res = await spAddItem('usuarios', usuarioASpFields(u));
+  if (res) { u.id = res.id; u._sp = true; }
 }
 
-function guardarUsuario() {
-  const editId = parseInt(document.getElementById('uEditId').value);
+async function guardarUsuario() {
+  const editIdRaw = document.getElementById('uEditId').value;
+  const editId = editIdRaw ? (isNaN(editIdRaw) ? editIdRaw : parseInt(editIdRaw)) : null;
   const nombre = document.getElementById('uNombre').value.trim();
   if (!nombre) { alert('El nombre es obligatorio'); return; }
 
@@ -7247,12 +7305,25 @@ function guardarUsuario() {
     lineas,
   };
 
-  if (editId) {
+  if (editId != null) {
     const idx = STATE.usuarios.findIndex(u => u.id === editId);
-    if (idx >= 0) STATE.usuarios[idx] = {...STATE.usuarios[idx], ...data};
+    if (idx >= 0) {
+      STATE.usuarios[idx] = {...STATE.usuarios[idx], ...data};
+      if (STATE.spConectado) {
+        const u = STATE.usuarios[idx];
+        if (u._sp) await spDeleteItem('usuarios', u.id); // ya existía en SharePoint: se reemplaza
+        const res = await spAddItem('usuarios', usuarioASpFields(u));
+        if (res) { u.id = res.id; u._sp = true; }
+      }
+    }
   } else {
-    const newId = Math.max(0, ...STATE.usuarios.map(u=>u.id)) + 1;
-    STATE.usuarios.push({id: newId, ...data});
+    const newId = Math.max(0, ...STATE.usuarios.map(u => typeof u.id === 'number' ? u.id : 0)) + 1;
+    const nuevo = {id: newId, ...data};
+    STATE.usuarios.push(nuevo);
+    if (STATE.spConectado) {
+      const res = await spAddItem('usuarios', usuarioASpFields(nuevo));
+      if (res) { nuevo.id = res.id; nuevo._sp = true; }
+    }
   }
   cerrarModal();
   renderView('admin_usuarios');
@@ -7266,8 +7337,10 @@ function confirmarBorrar(id) {
   document.getElementById('deleteNombre').textContent = u.nombre + ' ' + u.apellido + (u.legajo ? ' · Legajo ' + u.legajo : '');
   document.getElementById('deleteModal').style.display = 'flex';
 }
-function ejecutarBorrar() {
-  if (_borrarId) {
+async function ejecutarBorrar() {
+  if (_borrarId != null) {
+    const u = STATE.usuarios.find(x => x.id === _borrarId);
+    if (STATE.spConectado && u?._sp) await spDeleteItem('usuarios', _borrarId);
     STATE.usuarios = STATE.usuarios.filter(u => u.id !== _borrarId);
     _borrarId = null;
   }
