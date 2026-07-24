@@ -355,127 +355,36 @@ class Zn{constructor(e,r){this.cacheOutcome=he,this.cacheManager=r,this.apiId=e.
     <!-- Body -->
     <div style="padding:32px 36px 40px;flex:1;background:#f0f0f0;">
 
-      <!-- PASO 1 -->
-      <div id="step1">
-        <div style="font-size:22px;font-weight:800;color:#111111;margin-bottom:24px;text-align:center;letter-spacing:-.3px;">Seleccioná tu área</div>
-
-        <!-- OPERARIOS — grilla 2 col -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:12px;">
-
-          <!-- ZZ Velas -->
-          <div class="area-btn" id="area_vela" onclick="selectArea('operario_zz','vela')"
-            style="border:2.5px solid #bbbbbb;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:white;transition:all .15s;">
-            <div style="font-size:36px;margin-bottom:8px;">🕯️</div>
-            <div style="font-size:20px;font-weight:800;color:#111;">ZZ Velas</div>
-            <div style="font-size:13px;color:#666;margin-top:4px;font-weight:600;">Semielaborado</div>
-          </div>
-
-          <!-- ZZ Sahumerios -->
-          <div class="area-btn area-disabled" id="area_sahumerio" onclick="selectArea('operario_zz','sahumerio')"
-            style="border:2.5px solid #cccccc;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:#e8e8e8;opacity:.65;">
-            <div style="font-size:36px;margin-bottom:8px;">🌿</div>
-            <div style="font-size:20px;font-weight:800;color:#111;">ZZ Sahumerios</div>
-            <div style="font-size:12px;color:#c96a1a;margin-top:4px;font-weight:700;">Sin programa aún</div>
-          </div>
-
-          <!-- ZZ Aceites -->
-          <div class="area-btn area-disabled" id="area_aceite" onclick="selectArea('operario_zz','aceite')"
-            style="border:2.5px solid #cccccc;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:#e8e8e8;opacity:.65;">
-            <div style="font-size:36px;margin-bottom:8px;">🧴</div>
-            <div style="font-size:20px;font-weight:800;color:#111;">ZZ Aceites</div>
-            <div style="font-size:12px;color:#c96a1a;margin-top:4px;font-weight:700;">Sin programa aún</div>
-          </div>
-
-          <!-- Macerado -->
-          <div style="border:2.5px dashed #cccccc;border-radius:14px;padding:22px 14px;text-align:center;background:#e0e0e0;opacity:.4;">
-            <div style="font-size:36px;margin-bottom:8px;">⚗️</div>
-            <div style="font-size:20px;font-weight:800;color:#555;">Macerado</div>
-            <div style="font-size:12px;color:#888;margin-top:4px;font-weight:600;">Próximamente</div>
-          </div>
-
-          <!-- Packaging -->
-          <div class="area-btn" id="area_pkg" onclick="selectArea('operario_pkg','pkg')"
-            style="border:2.5px solid #bbbbbb;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:white;transition:all .15s;">
-            <div style="font-size:36px;margin-bottom:8px;">📦</div>
-            <div style="font-size:20px;font-weight:800;color:#111;">Packaging</div>
-            <div style="font-size:13px;color:#666;margin-top:4px;font-weight:600;">Empaque</div>
-          </div>
-
-          <!-- Packaging ANMAT -->
-          <div class="area-btn area-disabled" id="area_anmat" onclick="selectArea('operario_pkg','anmat')"
-            style="border:2.5px solid #cccccc;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:#e8e8e8;opacity:.65;">
-            <div style="font-size:36px;margin-bottom:8px;">📋</div>
-            <div style="font-size:20px;font-weight:800;color:#111;">Packaging ANMAT</div>
-            <div style="font-size:12px;color:#c96a1a;margin-top:4px;font-weight:700;">Sin formularios aún</div>
-          </div>
-
-        </div>
-
-        <!-- Divisor -->
-        <div style="border-top:2px solid #bbbbbb;margin:20px 0 16px;"></div>
-        <div style="font-size:14px;font-weight:700;color:#555;text-align:center;margin-bottom:12px;letter-spacing:.5px;text-transform:uppercase;">Acceso con contraseña</div>
-
-        <!-- SUPERVISOR/JEFE / KPI+PLANIFICACIÓN — 2 col -->
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
-          <div class="area-btn" id="area_sup" onclick="selectArea('supervisor','sup')"
-            style="border:2.5px solid #bbbbbb;border-radius:12px;padding:16px 8px;text-align:center;cursor:pointer;background:white;transition:all .15s;">
-            <div style="font-size:28px;margin-bottom:6px;">👁️</div>
-            <div style="font-size:16px;font-weight:800;color:#111;">Supervisor/Jefe</div>
-            <div style="font-size:11px;color:#888;margin-top:3px;font-weight:600;">🔒 Contraseña</div>
-          </div>
-          <div class="area-btn" id="area_plan" onclick="selectArea('planning','plan')"
-            style="border:2.5px solid #bbbbbb;border-radius:12px;padding:16px 8px;text-align:center;cursor:pointer;background:white;transition:all .15s;">
-            <div style="font-size:28px;margin-bottom:6px;">📊</div>
-            <div style="font-size:16px;font-weight:800;color:#111;">KPI/Planificación</div>
-            <div style="font-size:11px;color:#888;margin-top:3px;font-weight:600;">🔒 Contraseña</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- PASO 2a: Login por usuario (texto libre) -->
-      <div id="step2_names" style="display:none;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px;">
-          <button onclick="backToStep1()" style="background:#e0e0e0;border:none;cursor:pointer;font-size:22px;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#333;">←</button>
-          <div id="step2_area_label" style="font-size:22px;font-weight:800;color:#111;"></div>
-        </div>
+      <!-- PASO LOGIN: usuario único (operarios y privilegiados) — pantalla inicial -->
+      <div id="stepLogin" style="padding-top:60px;">
         <div style="margin-bottom:20px;">
-          <label style="display:block;font-size:16px;font-weight:700;color:#333;margin-bottom:9px;">Tu usuario</label>
-          <input id="opUser" type="text" placeholder="Ingresá tu usuario"
+          <label style="display:block;font-size:16px;font-weight:700;color:#333;margin-bottom:9px;">Usuario</label>
+          <input id="loginUser" type="text" placeholder="Ingresá tu usuario"
             style="width:100%;padding:18px 20px;border:2.5px solid #bbbbbb;border-radius:12px;font-size:20px;font-family:'Nunito',sans-serif;outline:none;background:white;color:#111;"
             onfocus="this.style.borderColor='#222'" onblur="this.style.borderColor='#bbbbbb'"
-            onkeydown="if(event.key==='Enter')doLoginOperario()">
+            onkeydown="if(event.key==='Enter')document.getElementById('loginPass').focus()">
         </div>
-        <div id="opError" style="display:none;background:#fde8e6;color:#c0392b;border-radius:8px;padding:12px 16px;font-size:15px;font-weight:700;margin-bottom:14px;"></div>
-        <button onclick="doLoginOperario()"
+        <div style="margin-bottom:20px;">
+          <label style="display:block;font-size:16px;font-weight:700;color:#333;margin-bottom:9px;">Contraseña</label>
+          <input id="loginPass" type="password" placeholder="Ingresá tu contraseña"
+            style="width:100%;padding:18px 20px;border:2.5px solid #bbbbbb;border-radius:12px;font-size:20px;font-family:'Nunito',sans-serif;outline:none;background:white;color:#111;"
+            onfocus="this.style.borderColor='#222'" onblur="this.style.borderColor='#bbbbbb'"
+            onkeydown="if(event.key==='Enter')doLoginUnico()">
+        </div>
+        <div id="loginError" style="display:none;background:#fde8e6;color:#c0392b;border-radius:8px;padding:12px 16px;font-size:15px;font-weight:700;margin-bottom:14px;"></div>
+        <button onclick="doLoginUnico()"
           style="width:100%;padding:18px;background:#222;color:white;border:none;border-radius:12px;font-size:20px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
-          Entrar →
+          Iniciar sesión →
         </button>
       </div>
 
-      <!-- PASO 2b: Contraseña -->
-      <div id="step2_password" style="display:none;">
-        <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px;">
-          <button onclick="backToStep1()" style="background:#e0e0e0;border:none;cursor:pointer;font-size:22px;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#333;">←</button>
-          <div id="step2_pwd_label" style="font-size:22px;font-weight:800;color:#111;"></div>
+      <!-- PASO ÁREA: operarios con más de un área asignada eligen con cuál trabajan hoy -->
+      <div id="stepAreaOperario" style="display:none;">
+        <div style="display:flex;align-items:center;gap:12px;margin-bottom:28px;">
+          <button onclick="volverAStepLogin()" style="background:#e0e0e0;border:none;cursor:pointer;font-size:22px;width:44px;height:44px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;color:#333;">←</button>
+          <div style="font-size:22px;font-weight:800;color:#111;">Elegí tu área de hoy</div>
         </div>
-        <div style="margin-bottom:16px;">
-          <label style="display:block;font-size:15px;font-weight:700;color:#333;margin-bottom:7px;">Usuario</label>
-          <input id="pwdUser" type="text" placeholder="Tu usuario"
-            style="width:100%;padding:16px 18px;border:2.5px solid #bbbbbb;border-radius:10px;font-size:18px;font-family:'Nunito',sans-serif;outline:none;background:white;color:#111;"
-            onfocus="this.style.borderColor='#222'" onblur="this.style.borderColor='#bbbbbb'">
-        </div>
-        <div style="margin-bottom:20px;">
-          <label style="display:block;font-size:15px;font-weight:700;color:#333;margin-bottom:7px;">Contraseña</label>
-          <input id="pwdPass" type="password" placeholder="••••••••"
-            style="width:100%;padding:16px 18px;border:2.5px solid #bbbbbb;border-radius:10px;font-size:18px;font-family:'Nunito',sans-serif;outline:none;background:white;color:#111;"
-            onfocus="this.style.borderColor='#222'" onblur="this.style.borderColor='#bbbbbb'"
-            onkeydown="if(event.key==='Enter')doLoginPassword()">
-        </div>
-        <div id="pwdError" style="display:none;background:#fde8e6;color:#c0392b;border-radius:8px;padding:12px 16px;font-size:15px;font-weight:700;margin-bottom:14px;"></div>
-        <button onclick="doLoginPassword()"
-          style="width:100%;padding:18px;background:#222;color:white;border:none;border-radius:12px;font-size:20px;font-weight:800;cursor:pointer;font-family:'Nunito',sans-serif;">
-          Ingresar →
-        </button>
+        <div id="areaOperarioGrid" style="display:grid;grid-template-columns:1fr 1fr;gap:12px;"></div>
       </div>
 
     </div>
@@ -951,6 +860,7 @@ function usuarioASpFields(u) {
     Password:  u.password || '',
     Rol:       u.rol || '',
     Area:      u.area || '',
+    Areas:     (u.areas || []).join(', '),
     Lineas:    (u.lineas || []).join(', '),
     Activo:    String(!!u.activo),
     Legajo:    u.legajo || '',
@@ -980,6 +890,7 @@ async function cargarUsuariosDesdeSharePoint() {
     // si queda algún registro viejo con ese valor, se normaliza a 'planning'.
     rol:       it.fields.Rol === 'kpi' ? 'planning' : (it.fields.Rol || 'operario_zz'),
     area:      it.fields.Area === 'kpi' ? 'plan' : (it.fields.Area || ''),
+    areas:     it.fields.Areas ? it.fields.Areas.split(',').map(s=>s.trim()).filter(Boolean) : (it.fields.Area ? [it.fields.Area] : []),
     lineas:    it.fields.Lineas ? it.fields.Lineas.split(',').map(s=>s.trim()).filter(Boolean) : [],
     activo:    it.fields.Activo === 'true' || it.fields.Activo === true,
     legajo:    it.fields.Legajo || '',
@@ -3673,176 +3584,107 @@ function detectarAreaAlerta(sku, linea, defaultArea) {
 let selectedRole = null;
 let selectedArea = null;
 
-function selectArea(role, area) {
-  if (AREAS_VACIAS.includes(area)) return;
+// Ícono para cada área, usado en el selector de área del operario.
+const AREA_ICONS = { vela:'🕯️', sahumerio:'🌿', aceite:'🧴', pkg:'📦', anmat:'📋' };
 
-  // Áreas pendientes: igual se puede entrar (sin programa)
-  selectedRole = role;
-  selectedArea = area;
-
-  // Marcar visual
-  document.querySelectorAll('.area-btn').forEach(b => {
-    b.style.borderColor = '#bbbbbb';
-    b.style.background = b.classList.contains('area-disabled') ? '#e8e8e8' : 'white';
-    b.style.transform = '';
-    b.style.boxShadow = '';
-  });
-  const el = document.getElementById('area_' + area);
-  if (el) {
-    el.style.borderColor = '#111111';
-    el.style.background = '#222222';
-    el.style.transform = 'scale(1.02)';
-    el.style.boxShadow = '0 4px 16px rgba(0,0,0,0.2)';
-    // Cambiar texto a blanco cuando está seleccionado
-    el.querySelectorAll('div').forEach(d => d.style.color = 'white');
-  }
-
-  if (AREAS_PASSWORD.includes(area)) {
-    // Flujo con contraseña — card chica, sin espacio vacío
-    document.getElementById('step1').style.display = 'none';
-    document.getElementById('step2_names').style.display = 'none';
-    document.getElementById('step2_password').style.display = 'block';
-    document.getElementById('step2_pwd_label').textContent = AREA_LABELS[area] || area;
-    document.getElementById('pwdUser').value = '';
-    document.getElementById('pwdPass').value = '';
-    document.getElementById('pwdError').style.display = 'none';
-    // Achicar la card — solo muestra el header + formulario, sin espacio vacío
-    const card = document.getElementById('loginCard');
-    if (card) card.style.minHeight = 'auto';
-    setTimeout(() => document.getElementById('pwdUser').focus(), 100);
-  } else {
-    // Flujo operario — login por usuario (texto libre)
-    document.getElementById('step1').style.display = 'none';
-    document.getElementById('step2_password').style.display = 'none';
-    document.getElementById('step2_names').style.display = 'block';
-    document.getElementById('step2_area_label').textContent = AREA_LABELS[area] || area;
-    const opUserEl = document.getElementById('opUser');
-    if (opUserEl) opUserEl.value = '';
-    const opErrEl = document.getElementById('opError');
-    if (opErrEl) opErrEl.style.display = 'none';
-    const card2 = document.getElementById('loginCard');
-    if (card2) card2.style.minHeight = 'auto';
-    setTimeout(() => document.getElementById('opUser')?.focus(), 100);
-  }
+function mostrarLoginUnico() {
+  document.getElementById('stepAreaOperario').style.display = 'none';
+  document.getElementById('stepLogin').style.display = 'block';
+  document.getElementById('loginUser').value = '';
+  document.getElementById('loginPass').value = '';
+  document.getElementById('loginError').style.display = 'none';
+  setTimeout(() => document.getElementById('loginUser').focus(), 100);
 }
 
-function doLoginOperario() {
-  const usr = document.getElementById('opUser').value.trim().toLowerCase();
-  const errEl = document.getElementById('opError');
-  if (!usr) { errEl.style.display='block'; errEl.textContent='Ingresá tu usuario'; return; }
+function volverAStepLogin() {
+  document.getElementById('stepAreaOperario').style.display = 'none';
+  mostrarLoginUnico();
+}
 
-  // Buscar usuario activo que sea operario
-  const match = STATE.usuarios.find(u =>
-    u.usuario.toLowerCase() === usr && u.activo && u.rol.startsWith('operario')
-  );
+// Login único: el usuario solo ingresa su usuario (y contraseña si corresponde
+// a un rol privilegiado) — la app decide sola qué pantalla mostrarle según su
+// perfil, sin tener que elegir un área "a ciegas" antes de identificarse.
+function doLoginUnico() {
+  const usr = document.getElementById('loginUser').value.trim();
+  const pwd = document.getElementById('loginPass').value;
+  const errEl = document.getElementById('loginError');
+  errEl.style.display = 'none';
 
-  if (!match) {
+  if (!usr) {
+    errEl.textContent = 'Ingresá tu usuario';
     errEl.style.display = 'block';
+    return;
+  }
+
+  const match = STATE.usuarios.find(u => u.usuario.toLowerCase() === usr.toLowerCase() && u.activo);
+  if (!match) {
     errEl.textContent = 'Usuario no encontrado o inactivo. Consultá con tu supervisor.';
-    document.getElementById('opUser').style.borderColor = '#c0392b';
-    setTimeout(() => { document.getElementById('opUser').style.borderColor = '#bbbbbb'; }, 2000);
-    return;
-  }
-
-  // Validar que el área del usuario corresponde al área seleccionada en el login
-  const areaRolMap = {
-    vela:'operario_zz', sahumerio:'operario_zz', aceite:'operario_zz',
-    pkg:'operario_pkg', anmat:'operario_pkg'
-  };
-  const rolEsperado = areaRolMap[selectedArea];
-  if (rolEsperado && match.rol !== rolEsperado) {
-    const areaLabel = selectedArea === 'pkg' || selectedArea === 'anmat' ? 'Packaging' : 'ZZ';
-    const areaUsuario = match.rol === 'operario_pkg' ? 'Packaging' : 'ZZ';
     errEl.style.display = 'block';
-    errEl.textContent = `Este usuario es de ${areaUsuario}, no de ${areaLabel}. Entrá por el área correcta.`;
-    document.getElementById('opUser').style.borderColor = '#c0392b';
-    setTimeout(() => { document.getElementById('opUser').style.borderColor = '#bbbbbb'; }, 2000);
+    document.getElementById('loginUser').style.borderColor = '#c0392b';
+    setTimeout(() => { document.getElementById('loginUser').style.borderColor = '#bbbbbb'; }, 2000);
     return;
   }
 
-  STATE.user = match;
-  STATE.role = match.rol;
-  errEl.style.display = 'none';
-  launchApp();
-}
+  if (match.password !== pwd) {
+    errEl.textContent = 'Contraseña incorrecta.';
+    errEl.style.display = 'block';
+    document.getElementById('loginPass').style.borderColor = '#c0392b';
+    setTimeout(() => { document.getElementById('loginPass').style.borderColor = '#bbbbbb'; }, 2000);
+    return;
+  }
 
-function selectOperario(id, el) {
-  document.querySelectorAll('#nameGrid > div').forEach(b => {
-    b.style.borderColor = '#bbbbbb';
-    b.style.background = 'white';
-    b.style.transform = '';
-    b.querySelectorAll('div').forEach(d => d.style.color = '');
-  });
-  el.style.borderColor = '#111';
-  el.style.background = '#222';
-  el.style.transform = 'scale(1.03)';
-  el.querySelectorAll('div').forEach(d => d.style.color = 'white');
-  STATE.user = STATE.usuarios.find(u => u.id === id);
-  STATE.role = STATE.user.rol;
-  document.getElementById('loginBtn').style.display = 'block';
-}
-
-function doLoginPassword() {
-  const usr = document.getElementById('pwdUser').value.trim();
-  const pwd = document.getElementById('pwdPass').value;
-  const errEl = document.getElementById('pwdError');
-
-  // Buscar usuario exacto (mismo usuario + contraseña + área correcta)
-  let match = STATE.usuarios.find(u =>
-    u.usuario === usr && u.password === pwd && u.activo &&
-    AREAS_PASSWORD.includes(u.area)
-  );
-
-  // Contraseña maestra: cualquier usuario KPI/Planificación puede entrar
-  // también como Supervisor/Jefe usando su propia contraseña.
-  if (!match) {
-    const jefe = STATE.usuarios.find(u =>
-      u.password === pwd && u.activo && u.rol === 'planning'
-    );
-    if (jefe) {
-      // El jefe entra pero asume el rol del área seleccionada
-      const areaRolMap = {sup:'supervisor', plan:'planning'};
-      const rolParaArea = areaRolMap[selectedArea] || 'supervisor';
-      match = {...jefe, rol: rolParaArea, area: selectedArea};
+  if (match.rol.startsWith('operario')) {
+    const areas = (match.areas && match.areas.length) ? match.areas : (match.area ? [match.area] : []);
+    if (areas.length === 0) {
+      errEl.textContent = 'Este usuario todavía no tiene ningún área asignada. Consultá con Planning.';
+      errEl.style.display = 'block';
+      return;
     }
+    if (areas.length === 1) {
+      STATE.user = { ...match, area: areas[0] };
+      STATE.role = rolParaArea(areas[0]);
+      launchApp();
+    } else {
+      mostrarSelectorAreaOperario(match, areas);
+    }
+  } else {
+    STATE.user = match;
+    STATE.role = match.rol;
+    launchApp();
   }
+}
 
-  if (!match) {
-    errEl.style.display = 'block';
-    errEl.textContent = 'Usuario o contraseña incorrectos. Verificá tus datos.';
-    document.getElementById('pwdPass').style.borderColor = '#c0392b';
-    setTimeout(() => document.getElementById('pwdPass').style.borderColor = '#bbbbbb', 2000);
-    return;
-  }
+// Solo se muestra cuando el operario tiene MÁS DE UN área asignada en su
+// perfil (configurado por Planning en "Usuarios y Accesos") — si tiene una
+// sola, entra directo sin este paso.
+function mostrarSelectorAreaOperario(user, areas) {
+  document.getElementById('stepLogin').style.display = 'none';
+  document.getElementById('stepAreaOperario').style.display = 'block';
+  const grid = document.getElementById('areaOperarioGrid');
+  grid.innerHTML = areas.map(a => `
+    <div onclick="confirmarAreaOperario(${user.id}, '${a}')"
+      style="border:2.5px solid #bbbbbb;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:white;">
+      <div style="font-size:36px;margin-bottom:8px;">${AREA_ICONS[a] || '📦'}</div>
+      <div style="font-size:18px;font-weight:800;color:#111;">${AREA_LABELS[a] || a}</div>
+    </div>`).join('');
+}
 
-  STATE.user = match;
-  STATE.role = match.rol;
-  errEl.style.display = 'none';
+// Deriva el rol interno (operario_zz / operario_pkg) a partir del área
+// elegida — no del rol guardado en el perfil — para que un operario con áreas
+// mixtas (ej. ZZ Velas + Packaging) quede enrutado correctamente según con
+// cuál entró hoy.
+function rolParaArea(area) {
+  return (area === 'pkg' || area === 'anmat') ? 'operario_pkg' : 'operario_zz';
+}
+
+function confirmarAreaOperario(userId, area) {
+  const u = STATE.usuarios.find(x => x.id === userId);
+  if (!u) return;
+  STATE.user = { ...u, area };
+  STATE.role = rolParaArea(area);
   launchApp();
 }
 
-function doLogin() {
-  if (!STATE.user) return;
-  launchApp();
-}
-
-function backToStep1() {
-  document.getElementById('step1').style.display = 'block';
-  document.getElementById('step2_names').style.display = 'none';
-  document.getElementById('step2_password').style.display = 'none';
-  // Restaurar altura completa para el paso 1 (grilla de áreas)
-  const card = document.getElementById('loginCard');
-  if (card) card.style.minHeight = '100vh';
-  selectedRole = null;
-  selectedArea = null;
-  document.querySelectorAll('.area-btn').forEach(b => {
-    b.style.borderColor = '#bbbbbb';
-    b.style.background = b.classList.contains('area-disabled') ? '#e8e8e8' : 'white';
-    b.style.transform = '';
-    b.style.boxShadow = '';
-    b.querySelectorAll('div').forEach(d => d.style.color = '');
-  });
-}
 
 function launchApp() {
   document.getElementById('loginScreen').style.display = 'none';
@@ -3884,18 +3726,7 @@ function doLogout() {
   selectedRole = null; selectedArea = null;
   document.getElementById('loginScreen').style.display = 'flex';
   document.getElementById('appShell').style.display = 'none';
-  document.getElementById('step1').style.display = 'block';
-  document.getElementById('step2_names').style.display = 'none';
-  document.getElementById('step2_password').style.display = 'none';
-  const card = document.getElementById('loginCard');
-  if (card) card.style.minHeight = '100vh';
-  document.querySelectorAll('.area-btn').forEach(b => {
-    b.style.borderColor = '#bbbbbb';
-    b.style.background = b.classList.contains('area-disabled') ? '#e8e8e8' : 'white';
-    b.style.transform = '';
-    b.style.boxShadow = '';
-    b.querySelectorAll('div').forEach(d => d.style.color = '');
-  });
+  mostrarLoginUnico();
   STATE.zzStep = 0; STATE.pkgStep = 0;
 }
 
@@ -4000,6 +3831,7 @@ function getMenuItems() {
       {id:'ver_produccion_zz', icon:ICON_OLLA, label:'Producción ZZ'},
       {id:'sup_alertas',       icon:'🔔', label:'Alertas', badge: alertBadge},
       {id:'sup_pesos',         icon:ICON_PESO, label:'Control Pesos'},
+      {id:'sup_liberacion',    icon:'✅', label:'Liberar Líneas', badge: libBadge},
       {section:'Administración'},
       {id:'admin_usuarios',    icon:'🔑', label:'Usuarios y Accesos'},
     ],
@@ -6085,32 +5917,106 @@ function rechazarLinea(idx) {
 
 // ── SUPERVISOR VISTA GENERAL ──
 function renderSupVista() {
+  const AREAS_VISTA = [
+    {val:'vela',      label:'ZZ Velas'},
+    {val:'sahumerio', label:'ZZ Sahumerios'},
+    {val:'aceite',    label:'ZZ Aceites'},
+    {val:'macerado',  label:'Macerado'},
+    {val:'pkg',       label:'Packaging'},
+    {val:'anmat',     label:'Packaging ANMAT'},
+  ];
+  if (!STATE.vistaGeneralAreas) STATE.vistaGeneralAreas = AREAS_VISTA.map(a => a.val); // por defecto, todas seleccionadas
+  const hoy = hoyLocal();
+
+  const estadoPill = (estado) => {
+    if (estado === 'CERRADO') return `<span class="pill pill-green">CERRADO</span>`;
+    if (estado === 'EN CURSO') return `<span class="pill pill-purple">EN CURSO</span>`;
+    return `<span class="pill" style="background:var(--border);color:var(--text3);">SIN INICIAR</span>`;
+  };
+
+  const renderSeccionZZ = (areaVal, label) => {
+    const filas = STATE.programaZZ.filter(p => p.fecha === hoy && detectarAreaAlerta(p.sku, p.linea, 'vela') === areaVal);
+    let html = `<div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;">${label}</div>`;
+    if (!filas.length) { html += `<div style="text-align:center;color:var(--text3);padding:14px;background:white;border-radius:12px;">Sin programa para hoy</div>`; return html; }
+    html += filas.map(p => {
+      const reg = STATE.lotesZZRegistros.find(r => r.sku === p.sku && r.fecha === hoy);
+      const enCurso = STATE.avancesZZEnCurso[p.sku + '_' + hoy];
+      const producido = reg ? reg.total : (enCurso ? enCurso.uds : 0);
+      const estado = reg ? 'CERRADO' : (enCurso ? 'EN CURSO' : 'SIN INICIAR');
+      const pct = p.cantidad > 0 ? Math.min(100, Math.round(producido / p.cantidad * 100)) : 0;
+      const col = estado === 'CERRADO' ? 'var(--green)' : estado === 'EN CURSO' ? 'var(--purple)' : 'var(--text3)';
+      const operarioU = p.operarioId ? STATE.usuarios.find(o => o.id === p.operarioId) : null;
+      const operarioNombre = operarioU ? operarioU.nombre + (operarioU.apellido ? ' ' + operarioU.apellido[0] + '.' : '') : 'Sin asignar';
+      return `<div class="card" style="margin-bottom:10px;">
+        <div class="card-body" style="padding:14px 16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
+            <div><div style="font-weight:700;">${operarioNombre}</div><div style="font-size:12px;color:var(--text3);">${p.sku} · ${p.linea}</div></div>
+            ${estadoPill(estado)}
+          </div>
+          <div class="progress-label"><span style="font-size:13px;">${producido.toLocaleString()} / ${p.cantidad.toLocaleString()} uni</span><span style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:${col};">${pct}%</span></div>
+          <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col};"></div></div>
+        </div>
+      </div>`;
+    }).join('');
+    return html;
+  };
+
+  const renderSeccionPkg = (areaVal, label) => {
+    const filas = STATE.programaPkg.filter(p => p.fecha === hoy && detectarAreaAlerta(p.sku, p.linea, 'pkg') === areaVal);
+    let html = `<div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;">${label}</div>`;
+    if (!filas.length) { html += `<div style="text-align:center;color:var(--text3);padding:14px;background:white;border-radius:12px;">Sin programa para hoy</div>`; return html; }
+    html += filas.map(p => {
+      const reg = STATE.lotesPkgRegistros.find(r => r.sku === p.sku && r.linea === p.linea && r.fecha === hoy);
+      const estado = reg ? 'CERRADO' : 'SIN INICIAR';
+      return `<div class="card" style="margin-bottom:10px;">
+        <div class="card-body" style="padding:14px 16px;">
+          <div style="display:flex;align-items:center;justify-content:space-between;">
+            <div><div style="font-weight:700;">${p.linea} · ${p.turno || ''}</div><div style="font-size:12px;color:var(--text3);">${p.sku} — ${p.desc || ''}</div></div>
+            <div style="display:flex;align-items:center;gap:8px;">${estadoPill(estado)}<span class="pill pill-purple">${reg ? reg.uds.toLocaleString() : '0'} / ${p.cantidad.toLocaleString()} uni</span></div>
+          </div>
+        </div>
+      </div>`;
+    }).join('');
+    return html;
+  };
+
+  const renderSeccionMacerado = () => `
+    <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;">Macerado</div>
+    <div style="text-align:center;color:var(--text3);padding:14px;background:white;border-radius:12px;">Área todavía no operativa en la app (Próximamente)</div>`;
+
   return `
-  <div class="page-header"><div class="page-title">👁️ Vista General</div><div class="page-sub">${formatFecha(hoyLocal())} · Tiempo real</div></div>
-  <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:10px;">ZZ — Semielaborado</div>
-  ${STATE.lotesZZ.map(l => {
-    const pct = Math.round(l.uds/l.prog*100);
-    const col = pct >= 90 ? 'var(--green)' : pct >= 60 ? 'var(--purple)' : 'var(--orange)';
-    return `<div class="card" style="margin-bottom:10px;">
-      <div class="card-body" style="padding:14px 16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-          <div><div style="font-weight:700;">${l.operario}</div><div style="font-size:12px;color:var(--text3);">${l.sku} · ${l.id}</div></div>
-          <span class="pill ${l.estado==='CERRADO'?'pill-green':'pill-purple'}">${l.estado}</span>
-        </div>
-        <div class="progress-label"><span style="font-size:13px;">${l.uds.toLocaleString()} / ${l.prog.toLocaleString()} uni</span><span style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:${col};">${pct}%</span></div>
-        <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col};"></div></div>
+  <div class="page-header"><div class="page-title">👁️ Vista General</div><div class="page-sub">${formatFecha(hoy)} · Tiempo real</div></div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-body" style="padding:14px 16px;">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">MOSTRAR ÁREAS</div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+        ${AREAS_VISTA.map(a => {
+          const activa = STATE.vistaGeneralAreas.includes(a.val);
+          return `<span onclick="toggleAreaVistaGeneral('${a.val}')" class="pill" style="cursor:pointer;user-select:none;background:${activa?'var(--purple)':'var(--border)'};color:${activa?'white':'var(--text3)'};font-weight:700;">${activa?'✓ ':''}${a.label}</span>`;
+        }).join('')}
       </div>
-    </div>`;}).join('')}
-  <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;">PACKAGING</div>
-  ${STATE.programaPkg.slice(0,4).map(p => `
-    <div class="card" style="margin-bottom:10px;">
-      <div class="card-body" style="padding:14px 16px;">
-        <div style="display:flex;align-items:center;justify-content:space-between;">
-          <div><div style="font-weight:700;">${p.linea} · ${p.turno}</div><div style="font-size:12px;color:var(--text3);">${p.sku} — ${p.desc}</div></div>
-          <span class="pill pill-purple">${p.cantidad.toLocaleString()} uni</span>
-        </div>
-      </div>
-    </div>`).join('')}`;
+    </div>
+  </div>
+
+  ${STATE.vistaGeneralAreas.includes('vela') ? renderSeccionZZ('vela', 'ZZ Velas') : ''}
+  ${STATE.vistaGeneralAreas.includes('sahumerio') ? renderSeccionZZ('sahumerio', 'ZZ Sahumerios') : ''}
+  ${STATE.vistaGeneralAreas.includes('aceite') ? renderSeccionZZ('aceite', 'ZZ Aceites') : ''}
+  ${STATE.vistaGeneralAreas.includes('macerado') ? renderSeccionMacerado() : ''}
+  ${STATE.vistaGeneralAreas.includes('pkg') ? renderSeccionPkg('pkg', 'Packaging') : ''}
+  ${STATE.vistaGeneralAreas.includes('anmat') ? renderSeccionPkg('anmat', 'Packaging ANMAT') : ''}
+  ${STATE.vistaGeneralAreas.length === 0 ? `<div style="text-align:center;color:var(--text3);padding:30px;">Elegí al menos un área arriba para ver su información</div>` : ''}
+  `;
+}
+
+function toggleAreaVistaGeneral(area) {
+  if (!STATE.vistaGeneralAreas) STATE.vistaGeneralAreas = [];
+  if (STATE.vistaGeneralAreas.includes(area)) {
+    STATE.vistaGeneralAreas = STATE.vistaGeneralAreas.filter(a => a !== area);
+  } else {
+    STATE.vistaGeneralAreas.push(area);
+  }
+  renderView('sup_vista');
 }
 
 // ── KPIs ──
@@ -6244,11 +6150,20 @@ function renderKPIs() {
           return `
           <div style="overflow-x:auto;">
           <table class="tbl">
-            <thead><tr><th>Olla</th><th>Avance</th><th>Lote</th><th>Código Alfa</th><th>Operario</th><th>Temp. mezcla</th><th>Insumos</th></tr></thead>
+            <thead><tr><th>Olla</th><th>Avance</th><th>Lote</th><th>Código Alfa</th><th>Operario</th><th>Temp. mezcla</th><th>Parafina</th><th>Soja</th><th>Esencia</th><th>Aditivo</th><th>Filtro</th><th>Anilina 1</th><th>Anilina 2</th></tr></thead>
             <tbody>
               ${ollasDelDia.map(o => {
                 const totalOllas = totalOllasParaSku(o.sku);
                 const tempOk = o.tempEsencia != null && o.tempEsencia <= 80;
+                const porTipo = {};
+                o.ingredientes.forEach(ing => { porTipo[ing.nombre] = ing; });
+                const celdaInsumo = ing => {
+                  if (!ing) return `<span style="color:var(--text3);">—</span>`;
+                  const excedido = ing.teorico > 0 && ing.cantidad > ing.teorico;
+                  const color = ing.teorico > 0 ? (excedido ? 'var(--orange)' : 'var(--green)') : 'inherit';
+                  const icono = ing.teorico > 0 ? (excedido ? ' ⚠' : ' ✓') : '';
+                  return `<span class="mono" style="color:${color};">${ing.cantidad} kg${icono}</span>${ing.lote ? '<br><span style="font-size:10px;color:var(--text3);">Lote ' + ing.lote + '</span>' : ''}`;
+                };
                 return `<tr>
                   <td class="mono">${o.olla}</td>
                   <td class="mono">${o.olla}${totalOllas ? ' / ' + totalOllas : ''}</td>
@@ -6256,18 +6171,19 @@ function renderKPIs() {
                   <td class="mono">${o.sku || '—'}</td>
                   <td>${o.operario || '—'}</td>
                   <td class="mono" style="color:${tempOk ? 'var(--green)' : 'var(--red)'};">${o.tempEsencia != null ? o.tempEsencia + '°C ' + (tempOk?'✓':'⚠') : '—'}</td>
-                  <td style="font-size:11px;line-height:1.6;">
-                    ${o.ingredientes.length === 0 ? '—' : o.ingredientes.map(ing => {
-                      const excedido = ing.teorico > 0 && ing.cantidad > ing.teorico;
-                      return `<div${excedido ? ' style="background:#fff3cd;padding:1px 5px;border-radius:4px;display:inline-block;margin:1px 0;"' : ''}>${ing.nombre}: ${ing.cantidad} kg${ing.lote ? ' (Lote ' + ing.lote + ')' : ''}</div>`;
-                    }).join('<br>')}
-                  </td>
+                  <td style="font-size:11px;">${celdaInsumo(porTipo['Parafina'])}</td>
+                  <td style="font-size:11px;">${celdaInsumo(porTipo['Soja'])}</td>
+                  <td style="font-size:11px;">${celdaInsumo(porTipo['Esencia'])}</td>
+                  <td style="font-size:11px;">${celdaInsumo(porTipo['Aditivo'])}</td>
+                  <td style="font-size:11px;">${celdaInsumo(porTipo['Filtro'])}</td>
+                  <td style="font-size:11px;">${celdaInsumo(porTipo['Anilina1'])}</td>
+                  <td style="font-size:11px;">${celdaInsumo(porTipo['Anilina2'])}</td>
                 </tr>`;
               }).join('')}
             </tbody>
           </table>
           </div>
-          <div style="font-size:11px;color:var(--text3);margin-top:8px;">Temp. mezcla = al momento de volcado de esencia (lím. 80°C) · en amarillo, insumos que superaron lo indicado por fórmula</div>`;
+          <div style="font-size:11px;color:var(--text3);margin-top:8px;">Temp. mezcla = al momento de volcado de esencia (lím. 80°C) · en amarillo con ⚠, insumos que superaron lo indicado por fórmula (dentro de la tolerancia ya validada al confirmar la olla) · en verde con ✓, dentro de lo indicado</div>`;
         })()}
       </div>
     </div>
@@ -7379,16 +7295,16 @@ function renderAdminUsuarios() {
       <!-- Solo operarios -->
       <div id="seccionOperario">
         <div class="field">
-          <label>Área principal</label>
-          <select id="uArea">
-            <option value="vela">ZZ Velas</option>
-            <option value="sahumerio">ZZ Sahumerios</option>
-            <option value="aceite">ZZ Aceites</option>
-            <option value="pkg">Packaging</option>
-            <option value="anmat">Packaging ANMAT</option>
-            <option value="macerado">Macerado</option>
-          </select>
-          <div class="field-hint">Área donde trabaja habitualmente. Puede trabajar en otras áreas también.</div>
+          <label>Áreas disponibles (para elegir al iniciar sesión)</label>
+          <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:6px;">
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;"><input type="checkbox" id="uArea_vela" value="vela"> ZZ Velas</label>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;"><input type="checkbox" id="uArea_sahumerio" value="sahumerio"> ZZ Sahumerios</label>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;"><input type="checkbox" id="uArea_aceite" value="aceite"> ZZ Aceites</label>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;"><input type="checkbox" id="uArea_pkg" value="pkg"> Packaging</label>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;"><input type="checkbox" id="uArea_anmat" value="anmat"> Packaging ANMAT</label>
+            <label style="display:flex;align-items:center;gap:8px;font-weight:600;font-size:14px;"><input type="checkbox" id="uArea_macerado" value="macerado"> Macerado</label>
+          </div>
+          <div class="field-hint">Si marcás más de una, el operario elige con cuál trabaja cada vez que inicia sesión. Si marcás solo una, entra directo a esa.</div>
         </div>
         <div class="field">
           <label>Líneas habilitadas (separadas por coma)</label>
@@ -7399,23 +7315,23 @@ function renderAdminUsuarios() {
 
       <!-- Solo privilegiados -->
       <div id="seccionPrivilegiado" style="display:none;">
-        <div class="field-row">
-          <div class="field">
-            <label>Rol</label>
-            <select id="uRol">
-              <option value="supervisor">Supervisor/Jefe</option>
-              <option value="planning">KPI/Planificación</option>
-            </select>
-          </div>
-          <div class="field">
-            <label>Contraseña</label>
-            <input id="uPassword" type="text" placeholder="Contraseña de acceso">
-          </div>
+        <div class="field">
+          <label>Rol</label>
+          <select id="uRol">
+            <option value="supervisor">Supervisor/Jefe</option>
+            <option value="planning">KPI/Planificación</option>
+          </select>
         </div>
         <div class="alert alert-blue" style="margin-bottom:12px;">
           <div class="alert-icon" style="font-size:13px;">ℹ️</div>
           <div class="alert-body" style="font-size:12px;">Un usuario KPI/Planificación puede ingresar también como Supervisor/Jefe usando su propia contraseña.</div>
         </div>
+      </div>
+
+      <div class="field">
+        <label>Contraseña</label>
+        <input id="uPassword" type="text" placeholder="Contraseña de acceso">
+        <div class="field-hint">Obligatoria para poder iniciar sesión, sea operario o rol privilegiado.</div>
       </div>
 
       <div class="field">
@@ -7466,7 +7382,9 @@ function abrirModalNuevo() {
   });
   const pw = document.getElementById('uPassword'); if(pw) pw.value = '';
   document.getElementById('uTipo').value = 'operario';
-  document.getElementById('uArea').value = 'vela';
+  ['vela','sahumerio','aceite','pkg','anmat','macerado'].forEach(a => {
+    const cb = document.getElementById('uArea_' + a); if (cb) cb.checked = (a === 'vela');
+  });
   document.getElementById('uRol').value = 'supervisor';
   document.getElementById('uActivo').value = 'true';
   actualizarFormModal();
@@ -7486,12 +7404,15 @@ function abrirModalEditar(id) {
 
   const esOp = u.rol.startsWith('operario');
   document.getElementById('uTipo').value = esOp ? 'operario' : 'privilegiado';
+  const pw = document.getElementById('uPassword'); if(pw) pw.value = u.password || '';
   if (esOp) {
-    document.getElementById('uArea').value = u.area || 'vela';
+    const areasDelUsuario = (u.areas && u.areas.length) ? u.areas : (u.area ? [u.area] : ['vela']);
+    ['vela','sahumerio','aceite','pkg','anmat','macerado'].forEach(a => {
+      const cb = document.getElementById('uArea_' + a); if (cb) cb.checked = areasDelUsuario.includes(a);
+    });
     document.getElementById('uLineas').value = (u.lineas||[]).join(', ');
   } else {
     document.getElementById('uRol').value = u.rol;
-    const pw = document.getElementById('uPassword'); if(pw) pw.value = u.password || '';
   }
   actualizarFormModal();
   document.getElementById('userModal').style.display = 'flex';
@@ -7526,17 +7447,22 @@ async function guardarUsuario() {
   const lineasRaw = document.getElementById('uLineas')?.value || '';
   const lineas = lineasRaw ? lineasRaw.split(',').map(l=>l.trim()).filter(Boolean) : [];
 
+  const areasElegidas = ['vela','sahumerio','aceite','pkg','anmat','macerado']
+    .filter(a => document.getElementById('uArea_' + a)?.checked);
+  if (esOp && areasElegidas.length === 0) { alert('Marcá al menos un área para este operario'); return; }
+
   const data = {
     nombre,
     apellido:  document.getElementById('uApellido').value.trim(),
     usuario:   document.getElementById('uUsuario').value.trim(),
     legajo:    document.getElementById('uLegajo').value.trim(),
     activo:    document.getElementById('uActivo').value === 'true',
-    rol:       esOp ? 'operario_' + (document.getElementById('uArea').value === 'pkg' || document.getElementById('uArea').value === 'anmat' ? 'pkg' : 'zz')
+    rol:       esOp ? rolParaArea(areasElegidas[0])
                     : document.getElementById('uRol').value,
-    area:      esOp ? document.getElementById('uArea').value
+    area:      esOp ? areasElegidas[0]
                     : {supervisor:'sup', planning:'plan'}[document.getElementById('uRol').value] || 'sup',
-    password:  esOp ? '' : (document.getElementById('uPassword')?.value || ''),
+    areas:     esOp ? areasElegidas : [],
+    password:  document.getElementById('uPassword')?.value || '',
     lineas,
   };
 
