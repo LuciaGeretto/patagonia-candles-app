@@ -832,7 +832,7 @@ async function sincronizarLotesMP() {
   if (!items.length) return; // si la lista está vacía o falló, no pisamos lo que ya había
   const lotesEsenciaReales = items.map(f => ({
     codigo: f.Codigo, nombre: f.Descripcion, lote: f.Lote || f.Codigo,
-    tipo: f.Tipo || 'Esencia', estado: f.Estado || 'Vigente',
+    tipo: f.TipoInsumo || 'Esencia', estado: f.Estado || 'Vigente',
     fechaVencimiento: f.FechaVencimiento ? String(f.FechaVencimiento).slice(0,10) : null,
     diasRestantes: f.DiasRestantes != null ? parseInt(f.DiasRestantes) : null,
     observaciones: f.Observaciones || null, proveedor: f.Proveedor || null,
@@ -6597,7 +6597,7 @@ async function leerExcelEsencias(inputEl) {
     for (const l of nuevos) {
       await spAddItem('lotesMP', {
         Title: l.codigo, Codigo: l.codigo, Descripcion: l.nombre, Lote: l.lote,
-        Tipo: l.tipo, Estado: l.estado, FechaVencimiento: l.fechaVencimiento,
+        TipoInsumo: l.tipo, Estado: l.estado, FechaVencimiento: l.fechaVencimiento,
         DiasRestantes: String(l.diasRestantes), Observaciones: l.observaciones, Proveedor: l.proveedor,
       });
     }
