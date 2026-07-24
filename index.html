@@ -3294,6 +3294,7 @@ const STATE = {
     {id:6,  nombre:"Paz",       apellido:"Sofía",   usuario:"paz.s",       password:"",      rol:"operario_pkg", area:"pkg",   lineas:["Horno"], activo:true, legajo:"0006"},
     {id:7,  nombre:"Romero",    apellido:"Clara",   usuario:"romero.c",    password:"",      rol:"operario_pkg", area:"pkg",   lineas:["Flowpack Velitas/Aceites"], activo:true, legajo:"0007"},
     {id:8,  nombre:"Ibarra",    apellido:"Tomás",   usuario:"ibarra.t",    password:"",      rol:"operario_pkg", area:"pkg",   lineas:["Etiquetadora"], activo:true, legajo:"0008"},
+    {id:26, nombre:"Horno",     apellido:"",        usuario:"horno",       password:"",      rol:"operario_pkg", area:"pkg",   lineas:["Horno"], activo:true},
     // SUPERVISORES / KPI / PLANNING (con contraseña)
     {id:9,  nombre:"Rodríguez", apellido:"María",   usuario:"supervisor1", password:"sup123",    rol:"supervisor",   area:"sup",   lineas:[], activo:true},
     {id:10, nombre:"López",     apellido:"Juan",    usuario:"kpi1",        password:"kpi123",    rol:"kpi",          area:"kpi",   lineas:[], activo:true},
@@ -3381,14 +3382,6 @@ const STATE = {
     {codigo:"ANI-ROSA-01",  nombre:"Anilina Rosa Pastel",         lote:"ANI-ROSA-01",  tipo:"Anilina", estado:"Vigente", fechaVencimiento:null, diasRestantes:null, observaciones:null, proveedor:null},
   ],
 
-  // Lotes asignados a operario pkg (para liberación)
-  asignacionPkg: {
-    "Mesa Pack Manual 1": {operarioId:5},
-    "Horno": {operarioId:6},
-    "Flowpack Velitas/Aceites": {operarioId:8},
-    "Etiquetadora": {operarioId:7},
-  },
-
   // Datos en tiempo real (simulado)
   lotesZZ: [
     {id:"ZZ-20250520-L9-001", sku:"ZZA26J", operario:"González L.", uds:940, prog:1200, estado:"EN CURSO", ollas:5},
@@ -3439,7 +3432,6 @@ const STATE = {
   pkgStep: 0,
   pkgLinea: null,
   pkgFecha: '2025-05-20',
-  pkgFechaSeleccionada: '2025-05-20',
   pkgPrograma: null,
   pkgLiberada: false,
   pkgHoraInicio: null,
@@ -5508,86 +5500,95 @@ async function confirmarCierre() {
     </div>`;
 }
 
-// ── PKG INICIO — elige línea, no operario ──
+// Packaging: a diferencia de ZZ (donde los operarios rotan y se asignan día a día
+// con "Confirmar Dotación"), cada operario de Packaging está asignado de forma FIJA
+// a una línea — la fuente de verdad es el campo `lineas` del perfil de usuario, que
+// Planning carga una sola vez al crear el usuario (no hace falta reconfirmar a diario).
+// Las líneas de Packaging vienen del Excel en MAYÚSCULAS ("HORNO") mientras que
+// en las fichas de usuario se cargan en formato título ("Horno"). Para que no se
+// pierdan matches por esta diferencia de mayúsculas/espacios, todas las comparaciones
+// de línea en Packaging usan esta función en vez de comparar con === directo.
+function lineaEq(a, b) {
+  return String(a || '').trim().toUpperCase() === String(b || '').trim().toUpperCase();
+}
+
+// ── PKG INICIO — el operario ve directamente su línea del día de hoy ──
+// Devuelve los IDs de los operarios que Planning confirmó para esta línea/fecha en
+// "Confirmar Dotación" (soporta más de un operario por línea). Busca primero en los
+// slots en memoria (los más completos, recién confirmados) y si no los encuentra
+// (por ejemplo, tras recargar la página) cae al operarioId que quedó guardado en el
+// programa — que solo guarda el operario "principal".
+function idsDotacionPkg(fecha, linea, pkgsLinea) {
+  if (STATE.dotacionPkgSlots) {
+    const key = Object.keys(STATE.dotacionPkgSlots).find(k => {
+      const sep = k.indexOf('|||');
+      return k.slice(0, sep) === fecha && lineaEq(k.slice(sep + 3), linea);
+    });
+    if (key) {
+      const ids = [...new Set(STATE.dotacionPkgSlots[key].filter(id => id > 0))];
+      if (ids.length) return ids;
+    }
+  }
+  const principal = pkgsLinea.find(p => p.operarioId)?.operarioId;
+  return principal ? [principal] : [];
+}
+
+// ── PKG INICIO — cada SKU programado es su propia tarjeta, sin paso intermedio
+// de "elegir línea" (el operario ya sabe en qué línea está: es su usuario) ──
 function renderPkgInicio() {
-  const hoy = STATE.pkgFechaSeleccionada || hoyLocal();
-  const fechasDisp = [...new Set(STATE.programaPkg.map(p => p.fecha||'2025-05-20'))].sort();
+  const hoy = hoyLocal(); // el día SIEMPRE es hoy — no es seleccionable por el operario
+  const misLineas = (STATE.user?.lineas || []).length ? STATE.user.lineas : [];
 
   return `
   <div class="page-header">
     <div class="page-title">📦 Packaging</div>
-    <div class="page-sub">Seleccioná tu línea del día</div>
+    <div class="page-sub">${formatFecha(hoy)}</div>
   </div>
 
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-body" style="padding:14px 16px;">
-      <div class="field" style="margin-bottom:0;">
-        <label>¿Qué día estás trabajando?</label>
-        <select onchange="STATE.pkgFechaSeleccionada=this.value;renderView('pkg_inicio')" style="font-size:16px;font-weight:700;padding:12px;">
-          ${fechasDisp.map(f => `<option value="${f}" ${f===hoy?'selected':''}>${formatFecha(f)}</option>`).join('')}
-        </select>
-      </div>
-    </div>
-  </div>
+  ${misLineas.length === 0 ? `<div class="alert alert-orange"><div class="alert-icon">⚠️</div><div class="alert-body"><div class="alert-title">Tu usuario no tiene una línea asignada</div><div class="alert-text">Consultá con Planning.</div></div></div>` :
+  misLineas.map(linea => {
+    const pkgsLinea = STATE.programaPkg.filter(p => lineaEq(p.linea, linea) && p.fecha === hoy);
+    const idsOp = idsDotacionPkg(hoy, linea, pkgsLinea);
+    const nombresOp = idsOp.map(id => STATE.operarios.find(o => o.id === id)).filter(Boolean).map(o => o.nombre + ' ' + (o.apellido||'')).join(', ');
 
-  <div class="card" style="margin-bottom:14px;">
-    <div class="card-header"><div class="card-title">¿En qué línea trabajás hoy?</div></div>
-    <div class="card-body">
-      ${Object.entries(STATE.asignacionPkg).map(([linea, {operarioId}]) => {
-        const op = STATE.operarios.find(o => o.id === operarioId);
-        const pkgsLinea = STATE.programaPkg.filter(p => p.linea === linea);
-        if (pkgsLinea.length === 0) return '';
-        const cerrados = pkgsLinea.filter(p => STATE.lotesPkgCerrados.includes(linea+'_'+p.sku+'_'+hoy));
-        const todoCerrado = cerrados.length === pkgsLinea.length;
-        return `<div class="sku-card ${todoCerrado?'selected':''}" style="${todoCerrado?'opacity:.6;cursor:default;':''}" onclick="${todoCerrado?'':` elegirLineaPkg('${linea}','${hoy}')`}">
-          <div class="sku-card-top">
-            <div>
-              <div style="font-size:17px;font-weight:800;">${linea}</div>
-              <div style="font-size:12px;color:var(--text3);margin-top:3px;">
-                Operarios programados: <strong>${op ? op.nombre+' '+op.apellido : 'Sin asignar'}</strong>
-              </div>
-            </div>
-            ${todoCerrado ? `<span class="pill pill-green">✓ CERRADO</span>` : `<span class="pill pill-purple">${pkgsLinea.length} SKU${pkgsLinea.length>1?'s':''}</span>`}
-          </div>
-          ${pkgsLinea.map(p => `<div style="font-size:12px;color:var(--text3);margin-top:4px;">${p.turno} · ${p.sku} — ${p.desc} · ${p.cantidad.toLocaleString()} uni · ${p.ot}</div>`).join('')}
-        </div>`;
-      }).join('')}
+    return `
+    <!-- LÍNEA -->
+    <div style="background:#222;border-radius:12px;padding:14px 18px;margin-bottom:10px;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:6px 16px;">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:26px;font-weight:700;color:white;letter-spacing:.5px;">${linea}</div>
+      <div style="font-size:18px;font-weight:700;color:#e8dcff;text-align:right;">Operario${idsOp.length>1?'s':''}: ${nombresOp || 'sin asignar'}</div>
     </div>
-  </div>`;
+
+    ${pkgsLinea.length === 0 ? `<div class="alert alert-orange" style="margin-bottom:10px;"><div class="alert-icon">⚠️</div><div class="alert-body"><div class="alert-title">Sin programa cargado para hoy</div></div></div>` :
+    pkgsLinea.map(p => {
+      const cerrado = STATE.lotesPkgCerrados.includes(linea+'_'+p.sku+'_'+hoy);
+      return `
+      <div class="sku-card ${cerrado?'selected':''}" style="${cerrado?'opacity:.6;cursor:default;':''}margin-bottom:10px;" onclick="${cerrado?'':`abrirSkuPkg('${linea.replace(/'/g,"\\'")}','${p.sku}','${hoy}')`}">
+        <div class="sku-card-top">
+          <div><div class="sku-code">${p.sku}</div><div class="sku-desc" style="font-size:15px;font-weight:700;margin-top:2px;">${p.desc}</div></div>
+          <div class="sku-qty">${p.cantidad.toLocaleString()} uni</div>
+        </div>
+        <div style="font-size:12px;color:var(--text3);">${p.ot}${cerrado ? ' · <span style="color:var(--green);font-weight:700;">✓ CERRADO</span>' : ''}</div>
+      </div>`;
+    }).join('')}
+    `;
+  }).join('')}`;
 }
 
-function elegirLineaPkg(linea, fecha) {
+function abrirSkuPkg(linea, sku, fecha) {
   STATE.pkgLinea = linea;
   STATE.pkgFecha = fecha;
-  // Mostrar SKUs de esa línea para elegir
-  const pkgs = STATE.programaPkg.filter(p => p.linea === linea);
-  const disponibles = pkgs.filter(p => !STATE.lotesPkgCerrados.includes(linea+'_'+p.sku+'_'+fecha));
-  if (disponibles.length === 1) {
-    STATE.pkgPrograma = disponibles[0];
-    STATE.pkgLiberada = false;
-    STATE.pkgHoraInicio = null;
-    navigateTo('pkg_produccion');
-  } else {
-    // Mostrar selector de SKU
-    document.getElementById('contentArea').innerHTML = `
-      <div class="page-header"><div class="page-title">📦 ${linea}</div><div class="page-sub">Seleccioná el SKU a producir</div></div>
-      ${disponibles.map(p => `
-        <div class="sku-card" onclick="STATE.pkgPrograma=STATE.programaPkg.find(x=>x.linea==='${linea}'&&x.sku==='${p.sku}');STATE.pkgLiberada=false;STATE.pkgHoraInicio=null;navigateTo('pkg_produccion')">
-          <div class="sku-card-top">
-            <div><div class="sku-code">${p.sku} · ${p.turno}</div><div class="sku-desc" style="font-size:15px;font-weight:700;margin-top:2px;">${p.desc}</div></div>
-            <div class="sku-qty">${p.cantidad.toLocaleString()} uni</div>
-          </div>
-          <div style="font-size:12px;color:var(--text3);">${p.ot}</div>
-        </div>`).join('')}`;
-  }
+  STATE.pkgPrograma = STATE.programaPkg.find(p => lineaEq(p.linea, linea) && p.sku === sku && p.fecha === fecha);
+  STATE.pkgLiberada = false;
+  STATE.pkgHoraInicio = null;
+  navigateTo('pkg_produccion');
 }
 
 // ── PKG PRODUCCIÓN ──
 function renderPkgProduccion() {
   if (!STATE.pkgPrograma) return `<div class="page-header"><div class="page-title">Producción</div></div><div class="alert alert-orange"><div class="alert-icon">⚠️</div><div class="alert-body"><div class="alert-title">Seleccioná una línea primero</div></div></div>`;
   const p = STATE.pkgPrograma;
-  const asig = STATE.asignacionPkg[p.linea];
-  const opAsig = STATE.operarios.find(o => o.id === asig?.operarioId);
+  const idsOpAsig = idsDotacionPkg(STATE.pkgFecha || hoyLocal(), p.linea, STATE.programaPkg.filter(x => lineaEq(x.linea, p.linea) && x.fecha === (STATE.pkgFecha || hoyLocal())));
+  const opsAsig = idsOpAsig.map(id => STATE.operarios.find(o => o.id === id)).filter(Boolean);
   const pct = STATE.pkgUnidadesProducidas > 0 ? Math.min(100, Math.round(STATE.pkgUnidadesProducidas / p.cantidad * 100)) : 0;
 
   if (!STATE.pkgLiberada) {
@@ -5600,11 +5601,11 @@ function renderPkgProduccion() {
     <div class="card" style="margin-bottom:14px;">
       <div class="card-header"><div class="card-title">Operarios programados para esta línea</div></div>
       <div class="card-body" style="padding:12px 16px;">
-        ${opAsig ? `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;">
-          <div style="width:36px;height:36px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--green);">${opAsig.nombre[0]}</div>
-          <div><div style="font-weight:700;">${opAsig.nombre}, ${opAsig.apellido}</div><div style="font-size:12px;color:var(--text3);">Asignado por Planning</div></div>
+        ${opsAsig.length ? opsAsig.map(op => `<div style="display:flex;align-items:center;gap:10px;padding:8px 0;">
+          <div style="width:36px;height:36px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--green);">${op.nombre[0]}</div>
+          <div><div style="font-weight:700;">${op.nombre}, ${op.apellido}</div><div style="font-size:12px;color:var(--text3);">Asignado por Planning</div></div>
           <span class="pill pill-green" style="margin-left:auto;">✓ Confirmado</span>
-        </div>` : `<div style="color:var(--text3);">Sin operario asignado — consultá con Planning</div>`}
+        </div>`).join('') : `<div style="color:var(--text3);">Sin operario asignado — consultá con Planning</div>`}
       </div>
     </div>
     <div class="card">
@@ -5614,10 +5615,6 @@ function renderPkgProduccion() {
           <label>N° Lote ZZ que recibiste</label>
           <input type="text" id="loteZZInput" placeholder="Escribí el número de lote" style="font-size:16px;padding:12px;">
           <div class="field-hint">Tipeo libre — escribí lo que figura en el lote físico</div>
-        </div>
-        <div class="field">
-          <label>N° Transferencia interna (si hay)</label>
-          <input type="text" id="transInput" placeholder="Opcional">
         </div>
         ${yaEnviada ? `
         <div class="lib-waiting">
@@ -5697,7 +5694,7 @@ function solicitarLiberacion() {
   if (!loteZZ) { alert('Ingresá el N° de lote ZZ'); return; }
   STATE.pkgLoteZZ = loteZZ;
   const p = STATE.pkgPrograma;
-  const op = STATE.operarios.find(o => o.id === STATE.asignacionPkg[p.linea]?.operarioId);
+  const op = STATE.user;
   STATE.liberacionesPendientes.push({linea: p.linea, operario: op ? op.nombre+' '+op.apellido : '—', sku: p.sku, loteZZ, hora: new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'})});
   STATE.alertas.unshift({tipo:'warn', area:detectarAreaAlerta(p.sku, p.linea, 'pkg'), titulo:`Liberación pendiente · ${p.linea}`, detalle:`${op?.nombre||'—'} quiere arrancar ${p.sku} · Lote ZZ: ${loteZZ}`, hora: new Date().toLocaleTimeString('es-AR',{hour:'2-digit',minute:'2-digit'}), accion:'Requiere aprobación'});
   STATE.pkgUnidadesProducidas = 0;
@@ -5742,7 +5739,6 @@ function cerrarLotePkg() {
   });
 
   // Calcular cumplimiento total de todas las líneas del día
-  const todasLineas = Object.keys(STATE.asignacionPkg);
   const progsDia = STATE.programaPkg;
   const cerradasHoy = STATE.lotesPkgRegistros.filter(r => r.fecha === STATE.pkgFecha);
 
@@ -6281,6 +6277,77 @@ async function leerExcelProgramaAncho(rawRows, diaRowIdx, tipo, nombreArchivo) {
   renderView('jefe_programa');
 }
 
+// Formato diario de Packaging: un archivo por día (ej. "2026-07-20_Programa_PT.xlsx"),
+// SIN fila de "Detalle" como en ZZ. Estructura fija por columna:
+// col A = Línea/operario · col B = SKU (Cod Alfa) · col C = Descripción · col D = Cantidad del día
+// (la columna de Cantidad es la misma que trae el nombre del día, ej. "LUNES", en su encabezado,
+// y la fecha justo arriba). Packaging no maneja turno mañana/tarde, así que ese campo queda vacío.
+function esFormatoPkgDiario(rawRows, diaRowIdx) {
+  const detalleRow = (rawRows[diaRowIdx + 1] || []).map(c => String(c).trim().toUpperCase());
+  return !detalleRow.includes('DETALLE');
+}
+
+async function leerExcelProgramaPkgDiario(rawRows, diaRowIdx, nombreArchivo) {
+  const dateRowIdx = diaRowIdx - 1; // la fecha va justo arriba del nombre del día
+  const diaRow = (rawRows[diaRowIdx] || []).map(c => String(c).trim().toUpperCase());
+  const dateRow = rawRows[dateRowIdx] || [];
+
+  // Puede haber más de una columna de día (si algún día llega una semana entera en
+  // el mismo archivo); cada columna de día trae su SKU y Descripción inmediatamente
+  // a la izquierda: SKU dos columnas antes, Descripción una columna antes.
+  const diaCols = [];
+  diaRow.forEach((h, colIdx) => {
+    if (DIAS_SEMANA.includes(h) && colIdx >= 2) {
+      const fecha = normalizarFechaExcel(dateRow[colIdx]);
+      if (fecha) diaCols.push({ colIdx, fecha, skuCol: colIdx - 2, descCol: colIdx - 1 });
+    }
+  });
+
+  if (diaCols.length === 0) {
+    alert('No pude leer el archivo de Packaging: esperaba una columna con el nombre del día (LUNES, MARTES…) y la fecha justo arriba. Revisá el formato.');
+    return;
+  }
+
+  // Si ya se había subido un archivo con este mismo nombre, se borra todo lo que
+  // vino de esa carga anterior (local y en SharePoint) para reemplazarlo en vez
+  // de duplicarlo — tal cual lo pediste.
+  await reemplazarProgramaPorArchivo('programaPkg', nombreArchivo);
+
+  let nuevos = 0;
+  let syncFallidos = 0;
+  for (let r = diaRowIdx + 1; r < rawRows.length; r++) {
+    const row = rawRows[r] || [];
+    const linea = String(row[0] || '').trim(); // columna A = línea/operario
+    if (!linea || linea.toUpperCase() === 'TOTAL') continue;
+
+    for (const dc of diaCols) {
+      const sku = String(row[dc.skuCol] || '').trim();
+      if (!sku) continue; // fila reservada sin SKU programado ese día: se ignora
+      const desc = String(row[dc.descCol] || '').trim();
+      const val = parseFloat(row[dc.colIdx]);
+      if (!val || val <= 0) continue;
+
+      if (STATE.programaPkg.some(p => p.linea === linea && p.sku === sku && p.fecha === dc.fecha)) continue;
+      const ot = siguienteOT('pkg');
+      const entry = { linea, sku, desc, cantidad: val, turno: '', ot, fecha: dc.fecha, filaExcel: r, nombreArchivo };
+      STATE.programaPkg.push(entry); nuevos++;
+      const syncRes = await spAddItem('programaPkg', {
+        Title: ot, Linea: linea, SKU: sku, Descripcion: desc, Cantidad: String(val),
+        Turno: '', OT: ot, Fecha: dc.fecha,
+        CargadoPor: STATE.user.nombre + ' ' + (STATE.user.apellido || ''), NombreArchivo: nombreArchivo || '',
+      });
+      if (STATE.spConectado && !syncRes) syncFallidos++;
+    }
+  }
+  const estadoSync = !STATE.spConectado
+    ? ' (local — conectá SharePoint para que se compartan).'
+    : syncFallidos > 0
+      ? ` — ⚠ ${syncFallidos} de ${nuevos} NO se pudieron sincronizar con SharePoint (revisá la consola del navegador con F12 para más detalle).`
+      : ' y sincronizadas con SharePoint.';
+  alert(`${nuevos} filas de Packaging cargadas${estadoSync}${nombreArchivo ? `\n\nComo el archivo se llama "${nombreArchivo}", si lo volvés a subir con el mismo nombre, esta carga se reemplaza en vez de duplicarse.` : ''}`);
+  renderView('jefe_programa');
+}
+
 async function leerExcelPrograma(inputEl, tipo) {
   const file = inputEl.files[0];
   if (!file) return;
@@ -6293,6 +6360,10 @@ async function leerExcelPrograma(inputEl, tipo) {
   const rawRows = XLSX.utils.sheet_to_json(sheet, {header:1, defval:''});
   const headerRowIdx = detectarFilaEncabezadoAncho(rawRows);
   if (headerRowIdx >= 0) {
+    if (tipo === 'pkg' && esFormatoPkgDiario(rawRows, headerRowIdx)) {
+      await leerExcelProgramaPkgDiario(rawRows, headerRowIdx, nombreArchivo);
+      return;
+    }
     await leerExcelProgramaAncho(rawRows, headerRowIdx, tipo, nombreArchivo);
     return;
   }
@@ -6551,8 +6622,56 @@ function confirmarDotacionZZ(fecha) {
   alert('✅ Dotación ZZ confirmada. Los operarios verán sus asignaciones actualizadas en la APP.');
   renderView('jefe_dotacion');
 }
-function confirmarDotacionPkg() {
-  alert('✅ Dotación de Packaging confirmada. Los operarios verán sus asignaciones actualizadas en la APP.');
+
+// Packaging: mismo mecanismo de slots múltiples que ZZ — por cada línea puede
+// haber más de un operario trabajando ese día, y Planning los confirma acá
+// (agregando o quitando operarios), igual que ya se hace para ZZ.
+function getDotacionPkgSlots(fecha, linea, filasLinea) {
+  if (!STATE.dotacionPkgSlots) STATE.dotacionPkgSlots = {};
+  const key = fecha + '|||' + linea;
+  if (!STATE.dotacionPkgSlots[key]) {
+    // 1° preferencia: operarioId ya cargado en el programa (si alguna carga lo trae).
+    const existentes = [...new Set(filasLinea.map(p => p.operarioId).filter(id => id))];
+    // 2° preferencia: el/los operarios cuya ficha ya tiene esta línea asignada.
+    const porFicha = existentes.length ? [] : STATE.usuarios.filter(u => u.rol === 'operario_pkg' && (u.lineas||[]).some(l => lineaEq(l, linea))).map(u => u.id);
+    STATE.dotacionPkgSlots[key] = existentes.length ? existentes : (porFicha.length ? porFicha : [0]);
+  }
+  return STATE.dotacionPkgSlots[key];
+}
+function agregarSlotDotacionPkg(fecha, linea) {
+  if (!STATE.dotacionPkgSlots) STATE.dotacionPkgSlots = {};
+  const key = fecha + '|||' + linea;
+  if (!STATE.dotacionPkgSlots[key]) STATE.dotacionPkgSlots[key] = [0];
+  STATE.dotacionPkgSlots[key].push(0);
+  renderView('jefe_dotacion');
+}
+function quitarSlotDotacionPkg(fecha, linea, idx) {
+  const key = fecha + '|||' + linea;
+  STATE.dotacionPkgSlots[key].splice(idx, 1);
+  if (STATE.dotacionPkgSlots[key].length === 0) STATE.dotacionPkgSlots[key] = [0];
+  renderView('jefe_dotacion');
+}
+function actualizarSlotDotacionPkg(fecha, linea, idx, operarioId) {
+  STATE.dotacionPkgSlots[fecha + '|||' + linea][idx] = operarioId;
+}
+
+// Confirma la dotación de Packaging: fija el operario principal de cada fila del
+// programa de esa línea/día (para reportes/KPI) y agrega la línea a la lista de
+// líneas visibles de CADA operario seleccionado, para que todos vean el programa
+// en su APP — igual que confirmarDotacionZZ.
+function confirmarDotacionPkg(fecha) {
+  const lineas = [...new Set(STATE.programaPkg.filter(p => p.fecha === fecha).map(p => p.linea))];
+  lineas.forEach(linea => {
+    const key = fecha + '|||' + linea;
+    const ids = (STATE.dotacionPkgSlots[key] || []).filter(id => id > 0);
+    const principal = ids[0] || 0;
+    STATE.programaPkg.filter(p => p.fecha === fecha && p.linea === linea).forEach(p => { p.operarioId = principal; });
+    ids.forEach(id => {
+      const u = STATE.usuarios.find(o => o.id === id);
+      if (u) { u.lineas = u.lineas || []; if (!u.lineas.some(l => lineaEq(l, linea))) u.lineas.push(linea); }
+    });
+  });
+  alert('✅ Dotación Packaging confirmada. Los operarios verán sus asignaciones actualizadas en la APP.');
   renderView('jefe_dotacion');
 }
 
@@ -6562,6 +6681,10 @@ function renderJefeDotacion() {
   const porLinea = {};
   progDelDia.forEach(p => { (porLinea[p.linea] = porLinea[p.linea] || []).push(p); });
   const opZZ = STATE.operarios.filter(o => o.rol === 'operario_zz');
+  const progPkgDelDia = STATE.programaPkg.filter(p => p.fecha === fecha);
+  const porLineaPkg = {};
+  progPkgDelDia.forEach(p => { (porLineaPkg[p.linea] = porLineaPkg[p.linea] || []).push(p); });
+  const opPkg = STATE.operarios.filter(o => o.rol === 'operario_pkg');
 
   return `
   <div class="page-header">
@@ -6601,22 +6724,31 @@ function renderJefeDotacion() {
   ${Object.keys(porLinea).length > 0 ? `<button class="btn btn-primary btn-block" style="margin-bottom:24px;" onclick="confirmarDotacionZZ('${fecha}')">✅ Confirmar dotación ZZ</button>` : ''}
 
   <div class="card" style="margin-bottom:14px;">
-    <div class="card-header"><div class="card-title">Packaging — Asignaciones</div></div>
+    <div class="card-header"><div class="card-title">Packaging — Operarios asignados</div></div>
     <div class="card-body">
-      ${Object.entries(STATE.asignacionPkg).map(([linea, {operarioId}]) => {
-        const op = STATE.operarios.find(o => o.id === operarioId);
-        const opPkg = STATE.operarios.filter(o => o.rol === 'operario_pkg');
-        return `<div style="display:flex;align-items:center;gap:12px;padding:10px 0;border-bottom:1px solid var(--border);">
-          <div style="width:36px;height:36px;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--green);">${op?.nombre[0]||'?'}</div>
-          <div style="flex:1;font-size:13px;font-weight:600;">${linea}</div>
-          <select onchange="STATE.asignacionPkg['${linea}'].operarioId=parseInt(this.value);renderView('jefe_dotacion')" style="padding:6px 10px;font-size:13px;border-radius:6px;border:1.5px solid var(--border);">
-            <option value="0">— Sin asignar</option>
-            ${opPkg.map(o => `<option value="${o.id}" ${o.id===operarioId?'selected':''}>${o.nombre}, ${o.apellido}</option>`).join('')}
-          </select>
-        </div>`;}).join('')}
+      ${Object.keys(porLineaPkg).length === 0 ? `<div style="text-align:center;color:var(--text3);padding:16px;">Sin programa de Packaging cargado para ${formatFecha(fecha)}</div>` :
+      Object.entries(porLineaPkg).map(([linea, filas]) => {
+        const skusUnicos = [...new Set(filas.map(p => p.sku))];
+        const slots = getDotacionPkgSlots(fecha, linea, filas);
+        return `
+        <div style="margin-bottom:18px;padding-bottom:14px;border-bottom:1px solid var(--border);">
+          <div style="font-family:'Rajdhani',sans-serif;font-size:19px;font-weight:800;color:#222;margin-bottom:2px;">${linea}</div>
+          <div style="font-size:12px;color:var(--text3);margin-bottom:10px;">SKUs programados hoy: <strong>${skusUnicos.join(', ')}</strong></div>
+          ${slots.map((opId, idx) => `
+          <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
+            <div style="width:32px;height:32px;flex-shrink:0;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--green);font-size:13px;">${STATE.usuarios.find(o=>o.id===opId)?.nombre[0]||'?'}</div>
+            <select onchange="actualizarSlotDotacionPkg('${fecha}','${linea.replace(/'/g,"\\'")}',${idx},parseInt(this.value))" style="flex:1;padding:6px 10px;font-size:13px;border-radius:6px;border:1.5px solid var(--border);">
+              <option value="0">— Sin asignar</option>
+              ${opPkg.map(o => `<option value="${o.id}" ${o.id===opId?'selected':''}>${o.nombre}, ${o.apellido}</option>`).join('')}
+            </select>
+            ${slots.length > 1 ? `<button onclick="quitarSlotDotacionPkg('${fecha}','${linea.replace(/'/g,"\\'")}',${idx})" style="background:none;border:none;color:var(--red);font-size:20px;line-height:1;cursor:pointer;padding:0 6px;">×</button>` : ''}
+          </div>`).join('')}
+          <button onclick="agregarSlotDotacionPkg('${fecha}','${linea.replace(/'/g,"\\'")}')" style="background:none;border:1.5px dashed var(--border);color:var(--green);font-size:12px;font-weight:700;padding:6px 12px;border-radius:6px;cursor:pointer;margin-top:2px;">+ Agregar operario</button>
+        </div>`;
+      }).join('')}
     </div>
   </div>
-  <button class="btn btn-green btn-block btn-xl" onclick="confirmarDotacionPkg()">✅ Confirmar dotación Packaging</button>`;
+  ${Object.keys(porLineaPkg).length > 0 ? `<button class="btn btn-green btn-block btn-xl" onclick="confirmarDotacionPkg('${fecha}')">✅ Confirmar dotación Packaging</button>` : ''}`;
 }
 
 // ── JEFE EXPORT ──
