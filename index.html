@@ -415,24 +415,18 @@ class Zn{constructor(e,r){this.cacheOutcome=he,this.cacheManager=r,this.apiId=e.
         <div style="border-top:2px solid #bbbbbb;margin:20px 0 16px;"></div>
         <div style="font-size:14px;font-weight:700;color:#555;text-align:center;margin-bottom:12px;letter-spacing:.5px;text-transform:uppercase;">Acceso con contraseña</div>
 
-        <!-- SUPERVISOR / KPI / PLANNING — 3 col -->
-        <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;">
-          <div class="area-btn" onclick="selectArea('supervisor','sup')"
+        <!-- SUPERVISOR/JEFE / KPI+PLANIFICACIÓN — 2 col -->
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;">
+          <div class="area-btn" id="area_sup" onclick="selectArea('supervisor','sup')"
             style="border:2.5px solid #bbbbbb;border-radius:12px;padding:16px 8px;text-align:center;cursor:pointer;background:white;transition:all .15s;">
             <div style="font-size:28px;margin-bottom:6px;">👁️</div>
-            <div style="font-size:16px;font-weight:800;color:#111;">Supervisor</div>
+            <div style="font-size:16px;font-weight:800;color:#111;">Supervisor/Jefe</div>
             <div style="font-size:11px;color:#888;margin-top:3px;font-weight:600;">🔒 Contraseña</div>
           </div>
-          <div class="area-btn" onclick="selectArea('kpi','kpi')"
+          <div class="area-btn" id="area_plan" onclick="selectArea('planning','plan')"
             style="border:2.5px solid #bbbbbb;border-radius:12px;padding:16px 8px;text-align:center;cursor:pointer;background:white;transition:all .15s;">
             <div style="font-size:28px;margin-bottom:6px;">📊</div>
-            <div style="font-size:16px;font-weight:800;color:#111;">KPI / Jefe</div>
-            <div style="font-size:11px;color:#888;margin-top:3px;font-weight:600;">🔒 Contraseña</div>
-          </div>
-          <div class="area-btn" onclick="selectArea('planning','plan')"
-            style="border:2.5px solid #bbbbbb;border-radius:12px;padding:16px 8px;text-align:center;cursor:pointer;background:white;transition:all .15s;">
-            <div style="font-size:28px;margin-bottom:6px;">📋</div>
-            <div style="font-size:16px;font-weight:800;color:#111;">Planificación</div>
+            <div style="font-size:16px;font-weight:800;color:#111;">KPI/Planificación</div>
             <div style="font-size:11px;color:#888;margin-top:3px;font-weight:600;">🔒 Contraseña</div>
           </div>
         </div>
@@ -622,6 +616,21 @@ async function registrarDispositivoConectado() {
   });
 }
 
+// Devuelve solo las filas <tr> de la tabla de compus conectadas — se usa tanto
+// al dibujar la pantalla por primera vez como al refrescar en segundo plano,
+// para no tener que volver a dibujar TODA la pantalla (eso cerraría de golpe
+// cualquier modal — ej. "Nuevo usuario" — que estuviera abierto en ese momento).
+function renderFilasDispositivos() {
+  if (!STATE.spConectado) return `<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px;">Conectate a SharePoint para ver esta lista.</td></tr>`;
+  if (STATE.dispositivosConectados.length === 0) return `<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px;">Cargando / sin datos todavía…</td></tr>`;
+  return STATE.dispositivosConectados.map(d => `
+    <tr>
+      <td style="font-weight:700;">${d.label || '—'}</td>
+      <td>${d.conectadoPor || '—'}</td>
+      <td class="mono" style="font-size:12px;">${d.fecha || '—'}</td>
+    </tr>`).join('');
+}
+
 // Trae la lista de dispositivos ya habilitados (para mostrar en Usuarios y Accesos).
 async function cargarDispositivosConectados() {
   if (!STATE.spConectado) return;
@@ -629,7 +638,9 @@ async function cargarDispositivosConectados() {
   STATE.dispositivosConectados = items.map(f => ({
     label: f.Title, conectadoPor: f.ConectadoPor, fecha: f.Fecha ? String(f.Fecha).slice(0,10) : null,
   })).sort((a,b) => (b.fecha||'').localeCompare(a.fecha||''));
-  if (STATE.currentView === 'admin_usuarios') renderView('admin_usuarios');
+  // Actualiza solo la tabla (no renderView completo) para no cerrar un modal abierto.
+  const tbody = document.getElementById('dispositivosTbody');
+  if (tbody) tbody.innerHTML = renderFilasDispositivos();
 }
 
 // Cartel global de sincronización — visible en CUALQUIER pantalla (incluidas las
@@ -884,8 +895,10 @@ async function cargarUsuariosDesdeSharePoint() {
     apellido:  it.fields.Apellido || '',
     usuario:   it.fields.Login || '',
     password:  it.fields.Password || '',
-    rol:       it.fields.Rol || 'operario_zz',
-    area:      it.fields.Area || '',
+    // 'kpi' era un rol propio antes de fusionar KPI/Jefe con Planificación —
+    // si queda algún registro viejo con ese valor, se normaliza a 'planning'.
+    rol:       it.fields.Rol === 'kpi' ? 'planning' : (it.fields.Rol || 'operario_zz'),
+    area:      it.fields.Area === 'kpi' ? 'plan' : (it.fields.Area || ''),
     lineas:    it.fields.Lineas ? it.fields.Lineas.split(',').map(s=>s.trim()).filter(Boolean) : [],
     activo:    it.fields.Activo === 'true' || it.fields.Activo === true,
     legajo:    it.fields.Legajo || '',
@@ -3397,7 +3410,7 @@ const STATE = {
     {id:26, nombre:"Horno",     apellido:"",        usuario:"horno",       password:"",      rol:"operario_pkg", area:"pkg",   lineas:["Horno"], activo:true},
     // SUPERVISORES / KPI / PLANNING (con contraseña)
     {id:9,  nombre:"Rodríguez", apellido:"María",   usuario:"supervisor1", password:"sup123",    rol:"supervisor",   area:"sup",   lineas:[], activo:true},
-    {id:10, nombre:"López",     apellido:"Juan",    usuario:"kpi1",        password:"kpi123",    rol:"kpi",          area:"kpi",   lineas:[], activo:true},
+    {id:10, nombre:"López",     apellido:"Juan",    usuario:"kpi1",        password:"kpi123",    rol:"planning",     area:"plan",  lineas:[], activo:true},
     {id:11, nombre:"Torres",    apellido:"Sandra",  usuario:"planning1",   password:"plan123",   rol:"planning",     area:"plan",  lineas:[], activo:true},
     {id:12, nombre:"Admin",     apellido:"Sistema", usuario:"admin",       password:"admin2025", rol:"planning",     area:"plan",  lineas:[], activo:true},
   ],
@@ -3544,12 +3557,12 @@ const STATE = {
 const AREA_LABELS = {
   vela: '🕯️ ZZ Velas', sahumerio: '🌿 ZZ Sahumerios',
   aceite: '🧴 ZZ Aceites', pkg: '📦 Packaging',
-  anmat: '📋 Packaging ANMAT', sup: '👁️ Supervisor',
-  kpi: '📊 KPI / Jefe', plan: '📋 Planificación'
+  anmat: '📋 Packaging ANMAT', sup: '👁️ Supervisor/Jefe',
+  plan: '📊 KPI/Planificación'
 };
 const AREAS_PENDIENTES = ['sahumerio','aceite','anmat'];
 const AREAS_VACIAS = ['macerado'];
-const AREAS_PASSWORD = ['sup','kpi','plan'];
+const AREAS_PASSWORD = ['sup','plan'];
 
 // Íconos de imagen (foto real) usados en vez de los emojis de olla/balanza,
 // para que se vean como el objeto real en toda la app.
@@ -3693,14 +3706,15 @@ function doLoginPassword() {
     AREAS_PASSWORD.includes(u.area)
   );
 
-  // Contraseña maestra: cualquier KPI/Jefe puede entrar como cualquier rol privilegiado
+  // Contraseña maestra: cualquier usuario KPI/Planificación puede entrar
+  // también como Supervisor/Jefe usando su propia contraseña.
   if (!match) {
     const jefe = STATE.usuarios.find(u =>
-      u.password === pwd && u.activo && u.rol === 'kpi'
+      u.password === pwd && u.activo && u.rol === 'planning'
     );
     if (jefe) {
       // El jefe entra pero asume el rol del área seleccionada
-      const areaRolMap = {sup:'supervisor', kpi:'kpi', plan:'planning'};
+      const areaRolMap = {sup:'supervisor', plan:'planning'};
       const rolParaArea = areaRolMap[selectedArea] || 'supervisor';
       match = {...jefe, rol: rolParaArea, area: selectedArea};
     }
@@ -3832,7 +3846,7 @@ function setupTopbar() {
 function getDefaultView() {
   const defaults = {
     operario_zz:'zz_inicio', operario_pkg:'pkg_inicio',
-    supervisor:'sup_alertas', kpi:'jefe_kpi', planning:'jefe_kpi'
+    supervisor:'sup_alertas', planning:'jefe_kpi'
   };
   return defaults[STATE.role] || 'sup_alertas';
 }
@@ -3886,15 +3900,6 @@ function getMenuItems() {
       {id:'sup_kpi',        icon:'📊', label:'KPIs'},
       {id:'sup_pesos',      icon:ICON_PESO, label:'Control Pesos'},
     ],
-    kpi: [
-      {section:'Análisis'},
-      {id:'jefe_kpi',   icon:'📊', label:'KPIs'},
-      {id:'sup_pesos',  icon:ICON_PESO, label:'Control Pesos'},
-      {id:'sup_vista',  icon:'👁️', label:'Vista General'},
-      {id:'ver_produccion_zz', icon:ICON_OLLA, label:'Producción ZZ'},
-      {section:'Alertas'},
-      {id:'sup_alertas',icon:'🔔', label:'Alertas', badge: alertBadge},
-    ],
     planning: [
       {section:'Planificación'},
       {id:'jefe_kpi',          icon:'📊', label:'KPIs'},
@@ -3904,6 +3909,7 @@ function getMenuItems() {
       {id:'jefe_export',       icon:'💾', label:'Export ERP'},
       {id:'jefe_trazabilidad', icon:'🔍', label:'Trazabilidad'},
       {section:'Control'},
+      {id:'sup_vista',         icon:'👁️', label:'Vista General'},
       {id:'ver_produccion_zz', icon:ICON_OLLA, label:'Producción ZZ'},
       {id:'sup_alertas',       icon:'🔔', label:'Alertas', badge: alertBadge},
       {id:'sup_pesos',         icon:ICON_PESO, label:'Control Pesos'},
@@ -6226,7 +6232,7 @@ function renderJefePrograma() {
         <strong>${STATE.esenciasInfo.total}</strong> lotes de esencia activos
       </div>` : `
       <div style="font-size:12px;color:var(--text3);">Lotes de esencia cargados hasta ahora: <strong>${STATE.lotesMP.filter(l=>l.tipo==='Esencia').length}</strong> (datos de ejemplo — subí la planilla de hoy para reemplazarlos)</div>`}
-      <div style="font-size:11px;color:var(--text3);margin-top:6px;">📌 Este archivo lo sube Planning o KPI/Jefe todos los días. Al cargarlo se reemplazan los lotes de esencia por los del día (no afecta Soja/Parafina/Aditivo/Anilina).</div>
+      <div style="font-size:11px;color:var(--text3);margin-top:6px;">📌 Este archivo lo sube Planning o KPI/Planificación todos los días. Al cargarlo se reemplazan los lotes de esencia por los del día (no afecta Soja/Parafina/Aditivo/Anilina).</div>
     </div>
   </div>`;
 }
@@ -6523,7 +6529,7 @@ async function leerExcelPrograma(inputEl, tipo) {
 }
 
 // ── Carga del Relevamiento de Esencias FIFO (Form 65) ──
-// Lo sube Planning o KPI/Jefe todos los días. Reemplaza SOLO los lotes tipo
+// Lo sube Planning o KPI/Planificación todos los días. Reemplaza SOLO los lotes tipo
 // "Esencia" en STATE.lotesMP (Soja/Parafina/Aditivo/Anilina no se tocan).
 async function leerExcelEsencias(inputEl) {
   const file = inputEl.files[0];
@@ -6973,7 +6979,7 @@ function renderAdminUsuarios() {
   const operarios = STATE.usuarios.filter(u => u.rol.startsWith('operario'));
   const privilegiados = STATE.usuarios.filter(u => !u.rol.startsWith('operario'));
 
-  const rolLabel = {supervisor:'Supervisor', kpi:'KPI / Jefe', planning:'Planificación'};
+  const rolLabel = {supervisor:'Supervisor/Jefe', planning:'KPI/Planificación'};
 
   return `
   <div class="page-header">
@@ -7042,7 +7048,7 @@ function renderAdminUsuarios() {
     <div class="alert alert-blue" style="margin:12px 16px 0;margin-bottom:0;">
       <div class="alert-icon" style="font-size:14px;">🔑</div>
       <div class="alert-body" style="font-size:12px;">
-        <strong>Contraseña maestra:</strong> cualquier usuario con rol KPI/Jefe puede ingresar también como Supervisor o Planificación usando su propia contraseña.
+        <strong>Contraseña maestra:</strong> cualquier usuario con rol KPI/Planificación puede ingresar también como Supervisor/Jefe usando su propia contraseña.
       </div>
     </div>
     <div style="overflow-x:auto;margin-top:8px;">
@@ -7098,17 +7104,8 @@ function renderAdminUsuarios() {
     <div style="overflow-x:auto;margin-top:8px;">
       <table class="tbl" style="margin:0;">
         <thead><tr><th>Nombre de la compu</th><th>Conectada por</th><th>Fecha</th></tr></thead>
-        <tbody>
-          ${!STATE.spConectado
-            ? `<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px;">Conectate a SharePoint para ver esta lista.</td></tr>`
-            : STATE.dispositivosConectados.length === 0
-              ? `<tr><td colspan="3" style="text-align:center;color:var(--text3);padding:20px;">Cargando / sin datos todavía…</td></tr>`
-              : STATE.dispositivosConectados.map(d => `
-          <tr>
-            <td style="font-weight:700;">${d.label || '—'}</td>
-            <td>${d.conectadoPor || '—'}</td>
-            <td class="mono" style="font-size:12px;">${d.fecha || '—'}</td>
-          </tr>`).join('')}
+        <tbody id="dispositivosTbody">
+          ${renderFilasDispositivos()}
         </tbody>
       </table>
     </div>
@@ -7169,9 +7166,8 @@ function renderAdminUsuarios() {
           <div class="field">
             <label>Rol</label>
             <select id="uRol">
-              <option value="supervisor">Supervisor</option>
-              <option value="kpi">KPI / Jefe</option>
-              <option value="planning">Planificación</option>
+              <option value="supervisor">Supervisor/Jefe</option>
+              <option value="planning">KPI/Planificación</option>
             </select>
           </div>
           <div class="field">
@@ -7181,7 +7177,7 @@ function renderAdminUsuarios() {
         </div>
         <div class="alert alert-blue" style="margin-bottom:12px;">
           <div class="alert-icon" style="font-size:13px;">ℹ️</div>
-          <div class="alert-body" style="font-size:12px;">Un usuario KPI/Jefe puede ingresar como Supervisor o Planificación usando su propia contraseña.</div>
+          <div class="alert-body" style="font-size:12px;">Un usuario KPI/Planificación puede ingresar también como Supervisor/Jefe usando su propia contraseña.</div>
         </div>
       </div>
 
@@ -7268,15 +7264,17 @@ function abrirModalEditar(id) {
 function agregarUsuario() { abrirModalNuevo(); }
 function editarUsuario(id) { abrirModalEditar(id); }
 
-async function toggleActivo(id) {
+function toggleActivo(id) {
   const u = STATE.usuarios.find(x => x.id === id);
   if (!u) return;
   u.activo = !u.activo;
   renderView('admin_usuarios');
   if (!STATE.spConectado) return;
-  if (u._sp) await spDeleteItem('usuarios', u.id); // ya existía en SharePoint: se reemplaza
-  const res = await spAddItem('usuarios', usuarioASpFields(u));
-  if (res) { u.id = res.id; u._sp = true; }
+  (async () => {
+    if (u._sp) await spDeleteItem('usuarios', u.id); // ya existía en SharePoint: se reemplaza
+    const res = await spAddItem('usuarios', usuarioASpFields(u));
+    if (res) { u.id = res.id; u._sp = true; }
+  })();
 }
 
 async function guardarUsuario() {
@@ -7300,20 +7298,27 @@ async function guardarUsuario() {
     rol:       esOp ? 'operario_' + (document.getElementById('uArea').value === 'pkg' || document.getElementById('uArea').value === 'anmat' ? 'pkg' : 'zz')
                     : document.getElementById('uRol').value,
     area:      esOp ? document.getElementById('uArea').value
-                    : {supervisor:'sup', kpi:'kpi', planning:'plan'}[document.getElementById('uRol').value] || 'sup',
+                    : {supervisor:'sup', planning:'plan'}[document.getElementById('uRol').value] || 'sup',
     password:  esOp ? '' : (document.getElementById('uPassword')?.value || ''),
     lineas,
   };
 
+  // La sincronización con SharePoint corre en segundo plano (sin await acá) para
+  // que cerrar el modal y ver la pantalla actualizada sea inmediato — así se
+  // puede seguir cargando el próximo usuario sin esperar, y sin que una
+  // sincronización tardía del usuario anterior cierre de golpe el modal
+  // del que se está cargando ahora.
   if (editId != null) {
     const idx = STATE.usuarios.findIndex(u => u.id === editId);
     if (idx >= 0) {
       STATE.usuarios[idx] = {...STATE.usuarios[idx], ...data};
+      const u = STATE.usuarios[idx];
       if (STATE.spConectado) {
-        const u = STATE.usuarios[idx];
-        if (u._sp) await spDeleteItem('usuarios', u.id); // ya existía en SharePoint: se reemplaza
-        const res = await spAddItem('usuarios', usuarioASpFields(u));
-        if (res) { u.id = res.id; u._sp = true; }
+        (async () => {
+          if (u._sp) await spDeleteItem('usuarios', u.id); // ya existía en SharePoint: se reemplaza
+          const res = await spAddItem('usuarios', usuarioASpFields(u));
+          if (res) { u.id = res.id; u._sp = true; }
+        })();
       }
     }
   } else {
@@ -7321,8 +7326,10 @@ async function guardarUsuario() {
     const nuevo = {id: newId, ...data};
     STATE.usuarios.push(nuevo);
     if (STATE.spConectado) {
-      const res = await spAddItem('usuarios', usuarioASpFields(nuevo));
-      if (res) { nuevo.id = res.id; nuevo._sp = true; }
+      (async () => {
+        const res = await spAddItem('usuarios', usuarioASpFields(nuevo));
+        if (res) { nuevo.id = res.id; nuevo._sp = true; }
+      })();
     }
   }
   cerrarModal();
@@ -7337,10 +7344,13 @@ function confirmarBorrar(id) {
   document.getElementById('deleteNombre').textContent = u.nombre + ' ' + u.apellido + (u.legajo ? ' · Legajo ' + u.legajo : '');
   document.getElementById('deleteModal').style.display = 'flex';
 }
-async function ejecutarBorrar() {
+function ejecutarBorrar() {
   if (_borrarId != null) {
     const u = STATE.usuarios.find(x => x.id === _borrarId);
-    if (STATE.spConectado && u?._sp) await spDeleteItem('usuarios', _borrarId);
+    if (STATE.spConectado && u?._sp) {
+      const idParaBorrar = _borrarId;
+      (async () => { await spDeleteItem('usuarios', idParaBorrar); })();
+    }
     STATE.usuarios = STATE.usuarios.filter(u => u.id !== _borrarId);
     _borrarId = null;
   }
