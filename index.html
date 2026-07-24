@@ -537,6 +537,7 @@ const SP_CONFIG = {
     lotesMP:       'LotesMP',
     dispositivos:  'Historial_DispositivosConectados',
     usuarios:      'Usuarios',
+    avanceZZ:      'AvanceProduccionZZ',
   },
   scopes: ['Sites.ReadWrite.All'],
 };
@@ -852,11 +853,67 @@ function iniciarPollingLotesMP() {
   spPollHandle = setInterval(async () => {
     if (!STATE.spConectado) return;
     await sincronizarLotesMP();
-    if (STATE.currentView === 'zz_ollas' || STATE.currentView === 'zz_inicio') renderView(STATE.currentView);
+    await cargarAvancesZZEnCurso();
+    if (STATE.currentView === 'zz_ollas' || STATE.currentView === 'zz_inicio' || STATE.currentView === 'jefe_kpi') renderView(STATE.currentView);
   }, 3 * 60 * 1000);
 }
 function detenerPollingLotesMP() {
   if (spPollHandle) { clearInterval(spPollHandle); spPollHandle = null; }
+}
+
+// ── AVANCE DE PRODUCCIÓN ZZ EN VIVO (antes de cerrar el lote) ──
+// Se guarda en una lista aparte de SharePoint (AvanceProduccionZZ) que Lucía va
+// a ir vaciando día a día para no cargar de más el sitio — acá solo se guarda
+// UNA fila por sku+fecha con el total acumulado hasta el momento (se reemplaza
+// cada vez que el operario carga un nuevo avance), no una fila por avance.
+
+// Sube/actualiza el avance en curso del lote que el operario tiene abierto
+// ahora mismo. No bloquea la UI — si falla, el avance sigue viéndose bien en
+// el propio dispositivo, solo no se comparte con el resto hasta que sincronice.
+async function sincronizarAvanceZZEnCurso() {
+  if (!STATE.spConectado || !STATE.zzPrograma) return;
+  try {
+    const sku = STATE.zzPrograma.sku;
+    const fecha = STATE.zzFecha;
+    const total = STATE.zzBachadas.reduce((s,b) => s + b.uds, 0);
+    const filtro = `fields/SKU eq '${sku.replace(/'/g,"''")}' and fields/Fecha eq '${fecha}'`;
+    const previos = await spGetItemsFull('avanceZZ', filtro);
+    for (const it of previos) await spDeleteItem('avanceZZ', it.id);
+    await spAddItem('avanceZZ', {
+      Title: sku + ' · ' + fecha, SKU: sku, Fecha: fecha, Linea: STATE.zzPrograma.linea,
+      Operario: STATE.user.nombre + ' ' + (STATE.user.apellido || ''), Unidades: String(total),
+      Hora: new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'}),
+    });
+  } catch (e) { console.error('Error sincronizando avance ZZ en curso:', e); }
+}
+
+// Borra el avance en curso de un lote — se llama al cerrar el lote, porque a
+// partir de ahí el dato oficial pasa a ser Historial_ProduccionZZ y este
+// registro "en curso" ya no hace falta (evita filas viejas acumulándose).
+async function limpiarAvanceZZEnCurso(sku, fecha) {
+  if (!STATE.spConectado) return;
+  try {
+    const filtro = `fields/SKU eq '${sku.replace(/'/g,"''")}' and fields/Fecha eq '${fecha}'`;
+    const previos = await spGetItemsFull('avanceZZ', filtro);
+    for (const it of previos) await spDeleteItem('avanceZZ', it.id);
+  } catch (e) { console.error('Error limpiando avance ZZ en curso:', e); }
+}
+
+// Trae de SharePoint el avance en curso de TODOS los operarios (para que
+// Planning/KPI lo vea desde cualquier dispositivo, no solo desde el celular
+// del operario que está produciendo).
+async function cargarAvancesZZEnCurso() {
+  if (!STATE.spConectado) return;
+  const items = await spGetItems('avanceZZ');
+  const nuevo = {};
+  items.forEach(f => {
+    const key = f.SKU + '_' + (f.Fecha || '');
+    nuevo[key] = {
+      uds: parseFloat(f.Unidades) || 0, operario: f.Operario || null,
+      linea: f.Linea || null, hora: f.Hora || null,
+    };
+  });
+  STATE.avancesZZEnCurso = nuevo;
 }
 
 // Convierte un usuario de STATE al formato de campos que espera la lista
@@ -911,6 +968,7 @@ async function cargarUsuariosDesdeSharePoint() {
 async function cargarHistorialDesdeSharePoint() {
   await sincronizarLotesMP();
   await cargarUsuariosDesdeSharePoint();
+  await cargarAvancesZZEnCurso();
   const [progZZ, progPkg, prodZZ, prodPkg] = await Promise.all([
     spGetItems('programaZZ'), spGetItems('programaPkg'),
     spGetItems('produccionZZ'), spGetItems('produccionPkg'),
@@ -952,6 +1010,7 @@ async function cargarHistorialDesdeSharePoint() {
         sku: f.Cod_alfa, fecha: f.Fecha ? f.Fecha.slice(0, 10) : null,
         total: parseFloat(f.UnidadesTotales) || 0, programado: parseFloat(f.UnidadesProgramadas) || 0,
         loteId: f.Lote, operario: f.Operario || null, linea: f.Linea || null,
+        rechazos: parseFloat(f.RechazosTotales) || 0, motivo: f.MotivoRechazos || null,
       });
       const clave = f.Cod_alfa + '_' + (f.Fecha ? f.Fecha.slice(0, 10) : null);
       if (!STATE.lotesZZCerrados.includes(clave)) STATE.lotesZZCerrados.push(clave);
@@ -965,6 +1024,7 @@ async function cargarHistorialDesdeSharePoint() {
         cajasComp: parseInt(f.CajasCompletas) || 0, cajasInc: parseInt(f.CajasIncompletas) || 0,
         uds: parseFloat(f.UnidadesProducidas) || 0, programado: parseFloat(f.UnidadesProgramadas) || 0,
         horaIni: f.HoraInicio, horaFin: f.HoraFin,
+        rechazos: parseFloat(f.UnidadesRechazadas) || 0, motivo: f.MotivoRechazo || null,
       });
       if (!STATE.lotesPkgCerrados.includes(clave)) STATE.lotesPkgCerrados.push(clave);
     }
@@ -3383,6 +3443,7 @@ const STATE = {
   spConectado: false,
   spSyncMsg: null,
   dispositivosConectados: [],
+  avancesZZEnCurso: {},     // {`${sku}_${fecha}`: {uds, operario, linea, hora}} — avance en vivo antes de cerrar el lote
   role: null,
   user: null,
   currentView: null,
@@ -5419,6 +5480,7 @@ function agregarBachada() {
   const hora = new Date().toLocaleTimeString('es-AR', {hour:'2-digit', minute:'2-digit'});
   STATE.zzBachadas.push({uds, hora, loteId, rechazos, motivo});
   STATE.zzUdsAcumuladas += uds;
+  sincronizarAvanceZZEnCurso(); // en segundo plano, no bloquea la pantalla
   // El recordatorio de pesaje (zzProximoPesoRef) NO se adelanta acá — si se
   // incrementara en el mismo paso que cruza el umbral, la alerta nunca llegaría
   // a mostrarse. Se avanza recién cuando el operario carga un peso (agregarPesoRef).
@@ -5522,7 +5584,8 @@ async function confirmarCierre() {
   // Marcar como cerrado — no permite volver a producir
   const clave = STATE.zzPrograma.sku + '_' + STATE.zzFecha;
   if (!STATE.lotesZZCerrados.includes(clave)) STATE.lotesZZCerrados.push(clave);
-  STATE.lotesZZRegistros.push({sku: STATE.zzPrograma.sku, fecha: STATE.zzFecha, total, programado: STATE.zzPrograma.cantidad, loteId: loteCodeVisible, operario: STATE.user.nombre + ' ' + (STATE.user.apellido||''), linea: STATE.zzPrograma.linea});
+  STATE.lotesZZRegistros.push({sku: STATE.zzPrograma.sku, fecha: STATE.zzFecha, total, programado: STATE.zzPrograma.cantidad, loteId: loteCodeVisible, operario: STATE.user.nombre + ' ' + (STATE.user.apellido||''), linea: STATE.zzPrograma.linea, rechazos: rechazosTotales, motivo: motivosRechazo || null});
+  limpiarAvanceZZEnCurso(STATE.zzPrograma.sku, STATE.zzFecha); // en segundo plano
   delete STATE.zzSesiones[STATE.zzPrograma.sku]; // ya cerrado: no queda "en progreso"
 
   // Sincronizar con SharePoint (si falla, el registro local ya quedó guardado; el resultado se muestra abajo)
@@ -5826,6 +5889,9 @@ function simularLiberacion() {
 function cerrarLotePkg() {
   const cajasComp = parseInt(document.getElementById('cajasComp')?.value) || 0;
   const cajasInc = parseInt(document.getElementById('cajasInc')?.value) || 0;
+  const rechazos = parseInt(document.getElementById('rechPkg')?.value) || 0;
+  const motivo = document.getElementById('motivoPkg')?.value || '';
+  const observaciones = document.getElementById('obsPkg')?.value || '';
   const p = STATE.pkgPrograma;
 
   // Validar que hay producción
@@ -5839,7 +5905,7 @@ function cerrarLotePkg() {
   // Marcar como cerrado
   const clave = STATE.pkgLinea+'_'+p.sku+'_'+(STATE.pkgFecha||'2025-05-20');
   if (!STATE.lotesPkgCerrados.includes(clave)) STATE.lotesPkgCerrados.push(clave);
-  STATE.lotesPkgRegistros.push({linea:STATE.pkgLinea, sku:p.sku, fecha:STATE.pkgFecha, cajasComp, cajasInc, uds:udsReales, programado:p.cantidad, horaIni:STATE.pkgHoraInicio, horaFin});
+  STATE.lotesPkgRegistros.push({linea:STATE.pkgLinea, sku:p.sku, fecha:STATE.pkgFecha, cajasComp, cajasInc, uds:udsReales, programado:p.cantidad, horaIni:STATE.pkgHoraInicio, horaFin, rechazos, motivo: motivo || null});
 
   // Sincronizar con SharePoint (no bloquea la UI; si falla, el registro local ya quedó guardado)
   spAddItem('produccionPkg', {
@@ -5847,6 +5913,7 @@ function cerrarLotePkg() {
     CajasCompletas: String(cajasComp), CajasIncompletas: String(cajasInc),
     UnidadesProducidas: String(udsReales), UnidadesProgramadas: String(p.cantidad),
     LoteZZRecibido: STATE.pkgLoteZZ || '', HoraInicio: STATE.pkgHoraInicio, HoraFin: horaFin,
+    UnidadesRechazadas: String(rechazos), MotivoRechazo: motivo, Observaciones: observaciones,
   });
 
   // Calcular cumplimiento total de todas las líneas del día
@@ -6022,27 +6089,110 @@ function renderSupVista() {
 
 // ── KPIs ──
 function renderKPIs() {
+  const fecha = STATE.kpiFecha || (STATE.kpiFecha = hoyLocal());
+  // Lotes ZZ (Velas, Sahumerios o Aceites — cualquier área) cerrados en el día
+  // elegido. Esta es la MISMA fuente que alimenta Historial/Trazabilidad, y se
+  // sincroniza con SharePoint (Historial_ProduccionZZ), así que refleja los
+  // cierres reales de cualquier operario, no un valor de ejemplo.
+  const lotesZZDelDia = STATE.lotesZZRegistros.filter(r => r.fecha === fecha);
+  const cumplZZ = lotesZZDelDia.length
+    ? Math.round(lotesZZDelDia.reduce((s,r) => s + (r.programado > 0 ? Math.min(100, r.total / r.programado * 100) : 0), 0) / lotesZZDelDia.length)
+    : 0;
+  // Líneas de Packaging (PT) que confirmaron/cerraron su producción en el día
+  // elegido — misma fuente que Historial (Historial_ProduccionPkg en SharePoint).
+  // Si ninguna línea confirmó nada ese día, no se muestra valor (guion), en vez
+  // de un 0% que podría confundirse con "cumplimiento real cero".
+  const lotesPTDelDia = STATE.lotesPkgRegistros.filter(r => r.fecha === fecha);
+  const cumplPT = lotesPTDelDia.length
+    ? Math.round(lotesPTDelDia.reduce((s,r) => s + (r.programado > 0 ? Math.min(100, r.uds / r.programado * 100) : 0), 0) / lotesPTDelDia.length)
+    : null;
+
+  // Encuentra el motivo de rechazo más frecuente entre los registros del día
+  // (cada registro puede traer varios motivos separados por coma, para ZZ).
+  function principalMotivoRechazo(records) {
+    const conteo = {};
+    records.forEach(r => {
+      if (!r.motivo) return;
+      r.motivo.split(',').map(m => m.trim()).filter(Boolean).forEach(m => { conteo[m] = (conteo[m]||0) + 1; });
+    });
+    const entries = Object.entries(conteo);
+    if (!entries.length) return null;
+    entries.sort((a,b) => b[1]-a[1]);
+    return entries[0][0];
+  }
+  // % Rechazo ZZ del día: solo entre los lotes que ya cerraron; si ninguno
+  // cerró todavía, no se muestra nada (ni siquiera 0%).
+  const rechazosZZ = lotesZZDelDia.reduce((s,r) => s + (r.rechazos||0), 0);
+  const producidoZZ = lotesZZDelDia.reduce((s,r) => s + (r.total||0), 0);
+  const pctRechazoZZ = lotesZZDelDia.length ? Math.round(rechazosZZ / Math.max(1, producidoZZ + rechazosZZ) * 1000) / 10 : null;
+  const motivoZZ = principalMotivoRechazo(lotesZZDelDia);
+  // % Rechazo PT del día: misma lógica, sobre las líneas de Packaging que
+  // confirmaron producción ese día.
+  const rechazosPT = lotesPTDelDia.reduce((s,r) => s + (r.rechazos||0), 0);
+  const producidoPT = lotesPTDelDia.reduce((s,r) => s + (r.uds||0), 0);
+  const pctRechazoPT = lotesPTDelDia.length ? Math.round(rechazosPT / Math.max(1, producidoPT + rechazosPT) * 1000) / 10 : null;
+  const motivoPT = principalMotivoRechazo(lotesPTDelDia);
   return `
-  <div class="page-header"><div class="page-title">📊 KPIs</div><div class="page-sub">${formatFecha(hoyLocal())} · Tiempo real</div></div>
+  <div class="page-header">
+    <div class="page-title">📊 KPIs</div>
+    <div class="page-sub">${formatFecha(fecha)}${fecha === hoyLocal() ? ' · Tiempo real' : ''}</div>
+    <div style="display:flex;gap:10px;align-items:flex-end;margin-top:10px;flex-wrap:wrap;">
+      <div class="field" style="max-width:220px;">
+        <label>Día</label>
+        <input type="date" value="${fecha}" onchange="STATE.kpiFecha=this.value;renderView('jefe_kpi')">
+      </div>
+      ${STATE.spConectado ? `<button class="btn btn-outline" style="padding:10px 16px;" onclick="cargarAvancesZZEnCurso().then(()=>renderView('jefe_kpi'))">🔄 Actualizar avance en vivo</button>` : ''}
+    </div>
+  </div>
   <div class="grid-4" style="margin-bottom:16px;">
-    <div class="kpi-card"><div class="kpi-label">Cumplimiento ZZ</div><div class="kpi-value" style="color:var(--purple);">87%</div><div class="kpi-sub">3 líneas · en curso</div><div class="kpi-bar" style="background:var(--purple);width:87%;"></div></div>
-    <div class="kpi-card"><div class="kpi-label">Cumplimiento Pkg</div><div class="kpi-value" style="color:var(--green);">72%</div><div class="kpi-sub">4 líneas activas</div><div class="kpi-bar" style="background:var(--green);width:72%;"></div></div>
-    <div class="kpi-card"><div class="kpi-label">Temp. prom. ollas</div><div class="kpi-value" style="color:var(--orange);">84.2°C</div><div class="kpi-sub">11 ollas · 1 alerta</div><div class="kpi-bar" style="background:var(--orange);width:84%;"></div></div>
-    <div class="kpi-card"><div class="kpi-label">% Rechazo ZZ</div><div class="kpi-value" style="color:var(--red);">1.8%</div><div class="kpi-sub">Principal: Burbujas</div><div class="kpi-bar" style="background:var(--red);width:18%;"></div></div>
+    <div class="kpi-card"><div class="kpi-label">Cumplimiento ZZ</div><div class="kpi-value" style="color:var(--purple);">${cumplZZ}%</div><div class="kpi-sub">${lotesZZDelDia.length} lote${lotesZZDelDia.length===1?'':'s'} cerrado${lotesZZDelDia.length===1?'':'s'} ese día</div><div class="kpi-bar" style="background:var(--purple);width:${cumplZZ}%;"></div></div>
+    <div class="kpi-card"><div class="kpi-label">Cumplimiento PT</div><div class="kpi-value" style="color:var(--green);">${cumplPT !== null ? cumplPT + '%' : '—'}</div><div class="kpi-sub">${lotesPTDelDia.length ? lotesPTDelDia.length + ' línea' + (lotesPTDelDia.length===1?'':'s') + ' confirmada' + (lotesPTDelDia.length===1?'':'s') + ' ese día' : 'Sin confirmaciones ese día'}</div><div class="kpi-bar" style="background:var(--green);width:${cumplPT || 0}%;"></div></div>
+    <div class="kpi-card"><div class="kpi-label">Rechazo PT</div><div class="kpi-value" style="color:var(--red);">${pctRechazoPT !== null ? pctRechazoPT + '%' : '—'}</div><div class="kpi-sub">${motivoPT ? 'Principal: ' + motivoPT : (lotesPTDelDia.length ? 'Sin rechazos ese día' : 'Sin confirmaciones ese día')}</div><div class="kpi-bar" style="background:var(--red);width:${pctRechazoPT || 0}%;"></div></div>
+    <div class="kpi-card"><div class="kpi-label">% Rechazo ZZ</div><div class="kpi-value" style="color:var(--red);">${pctRechazoZZ !== null ? pctRechazoZZ + '%' : '—'}</div><div class="kpi-sub">${motivoZZ ? 'Principal: ' + motivoZZ : (lotesZZDelDia.length ? 'Sin rechazos ese día' : 'Sin lotes cerrados ese día')}</div><div class="kpi-bar" style="background:var(--red);width:${pctRechazoZZ || 0}%;"></div></div>
+  </div>
+
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-header">
+      <div class="card-title">Producción ZZ por línea</div>
+      <span class="pill pill-purple">ZZ Semielaborado</span>
+    </div>
+    <div class="card-body">
+      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Incluye ZZ Velas, ZZ Sahumerios y ZZ Aceites · ${formatFecha(fecha)}</div>
+      ${(() => {
+        const progZZDelDia = STATE.programaZZ.filter(p => p.fecha === fecha);
+        if (!progZZDelDia.length) return `<div style="text-align:center;color:var(--text3);padding:20px;">Sin programa ZZ cargado para ${formatFecha(fecha)}</div>`;
+        const porLineaZZKpi = {};
+        progZZDelDia.forEach(p => { (porLineaZZKpi[p.linea] = porLineaZZKpi[p.linea] || []).push(p); });
+        const nombreCorto = u => u ? u.nombre + (u.apellido ? ' ' + u.apellido[0] + '.' : '') : null;
+        const operariosDeLinea = (linea, operarioIdProgramado) => {
+          if (operarioIdProgramado) {
+            const u = STATE.usuarios.find(o => o.id === operarioIdProgramado);
+            if (u) return nombreCorto(u);
+          }
+          const slotIds = (STATE.dotacionZZSlots?.[fecha + '|||' + linea] || []).filter(id => id > 0);
+          if (slotIds.length) return slotIds.map(id => nombreCorto(STATE.usuarios.find(o => o.id === id))).filter(Boolean).join(', ');
+          return 'Sin asignar';
+        };
+        return Object.entries(porLineaZZKpi).map(([linea, filas]) => `
+        <div style="margin-bottom:18px;">
+          <div style="font-weight:800;font-size:14px;margin-bottom:8px;">${linea}</div>
+          ${filas.map(p => {
+            const reg = STATE.lotesZZRegistros.find(r => r.sku === p.sku && r.fecha === fecha);
+            const enCurso = STATE.avancesZZEnCurso[p.sku + '_' + fecha];
+            const producido = reg ? reg.total : (enCurso ? enCurso.uds : 0);
+            const esEnCurso = !reg && !!enCurso;
+            const pct = p.cantidad > 0 ? Math.min(100, Math.round(producido / p.cantidad * 100)) : 0;
+            return `<div class="progress-wrap">
+              <div class="progress-label"><span style="font-size:12px;">${p.sku} · ${operariosDeLinea(linea, p.operarioId)}${esEnCurso ? ' <span style="color:var(--orange);font-weight:700;">● en curso</span>' : ''}</span><span style="font-family:'Rajdhani',sans-serif;font-weight:700;">${producido.toLocaleString()} / ${p.cantidad.toLocaleString()}</span></div>
+              <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${esEnCurso ? 'var(--orange)' : 'var(--purple)'};"></div></div>
+            </div>`;
+          }).join('')}
+        </div>`).join('');
+      })()}
+    </div>
   </div>
 
   <div class="grid-2" style="margin-bottom:16px;">
-    <div class="card">
-      <div class="card-header"><div class="card-title">Producción ZZ por línea</div></div>
-      <div class="card-body">
-        ${STATE.lotesZZ.map(l => {
-          const pct = Math.round(l.uds/l.prog*100);
-          return `<div class="progress-wrap">
-            <div class="progress-label"><span style="font-size:12px;">${l.sku} · ${l.operario}</span><span style="font-family:'Rajdhani',sans-serif;font-weight:700;">${l.uds.toLocaleString()} / ${l.prog.toLocaleString()}</span></div>
-            <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:var(--purple);"></div></div>
-          </div>`;}).join('')}
-      </div>
-    </div>
     <div class="card">
       <div class="card-header"><div class="card-title">Ollas del día</div></div>
       <div class="card-body">
@@ -6714,6 +6864,16 @@ function actualizarSlotDotacionZZ(fecha, linea, idx, operarioId) {
   STATE.dotacionZZSlots[fecha + '|||' + linea][idx] = operarioId;
 }
 
+// Actualiza al instante la inicial del avatar circular al lado del <select>,
+// para que se vea reflejado el operario recién elegido sin tener que volver a
+// dibujar toda la pantalla de Confirmar Dotación (se usa para ZZ y Packaging).
+function actualizarAvatarDotacion(selectEl) {
+  const opId = parseInt(selectEl.value);
+  const u = STATE.usuarios.find(o => o.id === opId);
+  const avatarEl = selectEl.previousElementSibling;
+  if (avatarEl) avatarEl.textContent = u ? u.nombre[0] : '?';
+}
+
 // Confirma la dotación de ZZ: fija el operario principal de cada fila del
 // programa (el primero de la lista de esa línea, para reportes/KPI) y agrega
 // la línea a la lista de líneas visibles de CADA operario seleccionado, para
@@ -6821,7 +6981,7 @@ function renderJefeDotacion() {
           ${slots.map((opId, idx) => `
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
             <div style="width:32px;height:32px;flex-shrink:0;border-radius:50%;background:var(--purple-light);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--purple);font-size:13px;">${STATE.usuarios.find(o=>o.id===opId)?.nombre[0]||'?'}</div>
-            <select onchange="actualizarSlotDotacionZZ('${fecha}','${linea.replace(/'/g,"\\'")}',${idx},parseInt(this.value))" style="flex:1;padding:6px 10px;font-size:13px;border-radius:6px;border:1.5px solid var(--border);">
+            <select onchange="actualizarSlotDotacionZZ('${fecha}','${linea.replace(/'/g,"\\'")}',${idx},parseInt(this.value));actualizarAvatarDotacion(this)" style="flex:1;padding:6px 10px;font-size:13px;border-radius:6px;border:1.5px solid var(--border);">
               <option value="0">— Sin asignar</option>
               ${opZZ.map(o => `<option value="${o.id}" ${o.id===opId?'selected':''}>${o.nombre}, ${o.apellido}</option>`).join('')}
             </select>
@@ -6848,7 +7008,7 @@ function renderJefeDotacion() {
           ${slots.map((opId, idx) => `
           <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px;">
             <div style="width:32px;height:32px;flex-shrink:0;border-radius:50%;background:var(--green-light);display:flex;align-items:center;justify-content:center;font-weight:800;color:var(--green);font-size:13px;">${STATE.usuarios.find(o=>o.id===opId)?.nombre[0]||'?'}</div>
-            <select onchange="actualizarSlotDotacionPkg('${fecha}','${linea.replace(/'/g,"\\'")}',${idx},parseInt(this.value))" style="flex:1;padding:6px 10px;font-size:13px;border-radius:6px;border:1.5px solid var(--border);">
+            <select onchange="actualizarSlotDotacionPkg('${fecha}','${linea.replace(/'/g,"\\'")}',${idx},parseInt(this.value));actualizarAvatarDotacion(this)" style="flex:1;padding:6px 10px;font-size:13px;border-radius:6px;border:1.5px solid var(--border);">
               <option value="0">— Sin asignar</option>
               ${opPkg.map(o => `<option value="${o.id}" ${o.id===opId?'selected':''}>${o.nombre}, ${o.apellido}</option>`).join('')}
             </select>
@@ -6943,10 +7103,10 @@ function renderJefeTrazabilidad() {
         <div class="divider"></div>
         <div style="font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;margin-bottom:8px;">Lote de Packaging vinculado</div>
         <table class="tbl"><tbody>
-          <tr><td style="color:var(--text3);">Línea Pkg</td><td>Mesa Pack Manual 1</td></tr>
-          <tr><td style="color:var(--text3);">Operario Pkg</td><td>Díaz, Carmen</td></tr>
+          <tr><td style="color:var(--text3);">Línea PT</td><td>Mesa Pack Manual 1</td></tr>
+          <tr><td style="color:var(--text3);">Operario PT</td><td>Díaz, Carmen</td></tr>
           <tr><td style="color:var(--text3);">Liberó</td><td>Supervisora · 13:08</td></tr>
-          <tr><td style="color:var(--text3);">OT Pkg</td><td class="mono">OT-2001</td></tr>
+          <tr><td style="color:var(--text3);">OT PT</td><td class="mono">OT-2001</td></tr>
         </tbody></table>
         <div style="margin-top:14px;display:flex;gap:8px;">
           <button class="btn btn-blue" onclick="alert('En producción: descarga el registro completo del lote en PDF')">📄 Exportar registro PDF</button>
@@ -6971,7 +7131,7 @@ function renderAdminUsuarios() {
     {val:'sahumerio',label:'ZZ Sahumerios'},
     {val:'aceite',   label:'ZZ Aceites'},
     {val:'pkg',      label:'Packaging'},
-    {val:'anmat',    label:'Pkg ANMAT'},
+    {val:'anmat',    label:'PT ANMAT'},
     {val:'macerado', label:'Macerado'},
   ];
   const areaLabel = v => AREAS_ALL.find(a=>a.val===v)?.label || v;
