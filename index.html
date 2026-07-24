@@ -3764,9 +3764,9 @@ function setupTopbar() {
 function getDefaultView() {
   const defaults = {
     operario_zz:'zz_inicio', operario_pkg:'pkg_inicio',
-    supervisor:'sup_alertas', planning:'jefe_kpi'
+    supervisor:'sup_vista', planning:'jefe_kpi'
   };
-  return defaults[STATE.role] || 'sup_alertas';
+  return defaults[STATE.role] || 'sup_vista';
 }
 
 function getMenuItems() {
@@ -3810,10 +3810,8 @@ function getMenuItems() {
     ],
     supervisor: [
       {section:'Supervisión'},
-      {id:'sup_alertas',    icon:'🔔', label:'Alertas',       badge: alertBadge},
       {id:'sup_liberacion', icon:'✅', label:'Liberar Líneas', badge: libBadge},
       {id:'sup_vista',      icon:'👁️', label:'Vista General'},
-      {id:'ver_produccion_zz', icon:ICON_OLLA, label:'Producción ZZ'},
       {section:'Análisis'},
       {id:'sup_kpi',        icon:'📊', label:'KPIs'},
       {id:'sup_pesos',      icon:ICON_PESO, label:'Control Pesos'},
@@ -5929,6 +5927,12 @@ function renderSupVista() {
   };
 
   const renderSeccionZZ = (areaVal, label) => {
+    // ZZ Sahumerios todavía no está operativo en la app (igual que Macerado) —
+    // se muestra un aviso en vez de datos que no existen.
+    if (areaVal === 'sahumerio') {
+      return `<div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;">${label}</div>
+      <div style="text-align:center;color:var(--text3);padding:14px;background:white;border-radius:12px;">Área todavía no operativa en la app (Próximamente)</div>`;
+    }
     const filas = STATE.programaZZ.filter(p => p.fecha === hoy && detectarAreaAlerta(p.sku, p.linea, 'vela') === areaVal);
     let html = `<div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;">${label}</div>`;
     if (!filas.length) { html += `<div style="text-align:center;color:var(--text3);padding:14px;background:white;border-radius:12px;">Sin programa para hoy</div>`; return html; }
@@ -5941,11 +5945,23 @@ function renderSupVista() {
       const col = estado === 'CERRADO' ? 'var(--green)' : estado === 'EN CURSO' ? 'var(--purple)' : 'var(--text3)';
       const operarioU = p.operarioId ? STATE.usuarios.find(o => o.id === p.operarioId) : null;
       const operarioNombre = operarioU ? operarioU.nombre + (operarioU.apellido ? ' ' + operarioU.apellido[0] + '.' : '') : 'Sin asignar';
+      // Lote y alerta de temperatura salen de las ollas confirmadas para este
+      // SKU/día (las mismas que alimentan la card "Ollas del día" en KPIs).
+      const ollasSku = STATE.ollasZZTodas.filter(o => o.sku === p.sku && o.fecha === hoy);
+      const lote = reg?.loteId || ollasSku[0]?.lote || null;
+      const alertaTemp = ollasSku.some(o => o.tempEsencia != null && o.tempEsencia > 80);
       return `<div class="card" style="margin-bottom:10px;">
         <div class="card-body" style="padding:14px 16px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <div><div style="font-weight:700;">${operarioNombre}</div><div style="font-size:12px;color:var(--text3);">${p.sku} · ${p.linea}</div></div>
-            ${estadoPill(estado)}
+            <div>
+              <div style="font-weight:700;">${operarioNombre}</div>
+              <div style="font-size:12px;color:var(--text3);">${p.sku} · ${p.desc || ''} · ${p.linea}</div>
+              <div style="font-size:12px;color:var(--text3);">Lote: ${lote || '—'}</div>
+            </div>
+            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
+              ${estadoPill(estado)}
+              ${alertaTemp ? `<span class="pill pill-red">🌡️ Alerta temp.</span>` : ''}
+            </div>
           </div>
           <div class="progress-label"><span style="font-size:13px;">${producido.toLocaleString()} / ${p.cantidad.toLocaleString()} uni</span><span style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:${col};">${pct}%</span></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col};"></div></div>
