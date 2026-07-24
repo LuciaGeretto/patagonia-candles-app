@@ -3641,13 +3641,7 @@ function doLoginUnico() {
       errEl.style.display = 'block';
       return;
     }
-    if (areas.length === 1) {
-      STATE.user = { ...match, area: areas[0] };
-      STATE.role = rolParaArea(areas[0]);
-      launchApp();
-    } else {
-      mostrarSelectorAreaOperario(match, areas);
-    }
+    mostrarSelectorAreaOperario(match, areas);
   } else {
     STATE.user = match;
     STATE.role = match.rol;
@@ -3655,19 +3649,38 @@ function doLoginUnico() {
   }
 }
 
-// Solo se muestra cuando el operario tiene MÁS DE UN área asignada en su
-// perfil (configurado por Planning en "Usuarios y Accesos") — si tiene una
-// sola, entra directo sin este paso.
+// Siempre se muestran las 6 áreas — las que el operario tiene asignadas en su
+// perfil (configuradas por Planning en "Usuarios y Accesos") quedan
+// habilitadas y clickeables; el resto se ve en gris claro, sin poder
+// seleccionarse. Así, aunque tenga una sola área asignada, igual la elige
+// tocándola (no entra automático).
+const AREA_SUBLABEL = {
+  vela: 'Semielaborado', sahumerio: 'Semielaborado', aceite: 'Semielaborado',
+  pkg: 'Empaque', anmat: 'Empaque', macerado: 'Próximamente',
+};
 function mostrarSelectorAreaOperario(user, areas) {
   document.getElementById('stepLogin').style.display = 'none';
   document.getElementById('stepAreaOperario').style.display = 'block';
   const grid = document.getElementById('areaOperarioGrid');
-  grid.innerHTML = areas.map(a => `
-    <div onclick="confirmarAreaOperario(${user.id}, '${a}')"
-      style="border:2.5px solid #bbbbbb;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:white;">
-      <div style="font-size:36px;margin-bottom:8px;">${AREA_ICONS[a] || '📦'}</div>
-      <div style="font-size:18px;font-weight:800;color:#111;">${AREA_LABELS[a] || a}</div>
-    </div>`).join('');
+  const TODAS_LAS_AREAS = ['vela','sahumerio','aceite','macerado','pkg','anmat'];
+  grid.innerHTML = TODAS_LAS_AREAS.map(a => {
+    // Macerado no está operativo en ningún lado de la app todavía, más allá
+    // de si el operario la tiene asignada o no.
+    const habilitada = areas.includes(a) && a !== 'macerado';
+    if (habilitada) {
+      return `<div onclick="confirmarAreaOperario(${user.id}, '${a}')"
+        style="border:2.5px solid #bbbbbb;border-radius:14px;padding:22px 14px;text-align:center;cursor:pointer;background:white;">
+        <div style="font-size:36px;margin-bottom:8px;">${AREA_ICONS[a] || '📦'}</div>
+        <div style="font-size:18px;font-weight:800;color:#111;">${AREA_LABELS[a] || a}</div>
+        <div style="font-size:13px;color:#666;margin-top:4px;font-weight:600;">${AREA_SUBLABEL[a] || ''}</div>
+      </div>`;
+    }
+    return `<div style="border:2.5px solid #cccccc;border-radius:14px;padding:22px 14px;text-align:center;background:#e8e8e8;opacity:.6;cursor:not-allowed;">
+      <div style="font-size:36px;margin-bottom:8px;filter:grayscale(1);">${AREA_ICONS[a] || '📦'}</div>
+      <div style="font-size:18px;font-weight:800;color:#888;">${AREA_LABELS[a] || a}</div>
+      <div style="font-size:12px;color:#aaa;margin-top:4px;font-weight:700;">${a === 'macerado' ? 'Próximamente' : 'No asignada'}</div>
+    </div>`;
+  }).join('');
 }
 
 // Deriva el rol interno (operario_zz / operario_pkg) a partir del área
