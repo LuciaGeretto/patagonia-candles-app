@@ -854,6 +854,7 @@ function iniciarPollingLotesMP() {
     if (!STATE.spConectado) return;
     await sincronizarLotesMP();
     await cargarAvancesZZEnCurso();
+    await cargarOllasZZDesdeSharePoint();
     if (STATE.currentView === 'zz_ollas' || STATE.currentView === 'zz_inicio' || STATE.currentView === 'jefe_kpi') renderView(STATE.currentView);
   }, 3 * 60 * 1000);
 }
@@ -916,8 +917,31 @@ async function cargarAvancesZZEnCurso() {
   STATE.avancesZZEnCurso = nuevo;
 }
 
-// Convierte un usuario de STATE al formato de campos que espera la lista
-// "Usuarios" en SharePoint (todo como texto, como el resto de las listas).
+// Trae TODAS las ollas confirmadas (cualquier operario, cualquier dispositivo)
+// para la card "Ollas del día" en KPIs. Solo se actualiza cuando alguien
+// confirma una olla de verdad (spAddItem en confirmarOlla) — acá simplemente
+// se relee lo que ya está guardado en SharePoint.
+async function cargarOllasZZDesdeSharePoint() {
+  if (!STATE.spConectado) return;
+  const items = await spGetItems('ollasZZ');
+  const armarIngrediente = (nombre, prefijo, f) => {
+    const cantidad = parseFloat(f[prefijo + 'Cantidad']) || 0;
+    const lote = f[prefijo + 'Lote'] || '';
+    const teorico = parseFloat(f[prefijo + 'Teorico']) || 0;
+    if (!cantidad && !lote) return null;
+    return { nombre, cantidad, lote, teorico };
+  };
+  STATE.ollasZZTodas = items.map(f => ({
+    fecha: f.Fecha ? String(f.Fecha).slice(0,10) : null,
+    operario: f.Operario || null,
+    sku: f.Cod_alfa || null,
+    lote: f.Lote || null,
+    olla: parseInt(f.Olla) || 0,
+    tempEsencia: parseFloat(f.TC) || null,
+    ingredientes: ['Parafina','Soja','Esencia','Aditivo','Filtro','Anilina1','Anilina2']
+      .map(p => armarIngrediente(p, p, f)).filter(Boolean),
+  }));
+}
 function usuarioASpFields(u) {
   return {
     Title:     (u.nombre || '') + ' ' + (u.apellido || ''),
@@ -969,6 +993,7 @@ async function cargarHistorialDesdeSharePoint() {
   await sincronizarLotesMP();
   await cargarUsuariosDesdeSharePoint();
   await cargarAvancesZZEnCurso();
+  await cargarOllasZZDesdeSharePoint();
   const [progZZ, progPkg, prodZZ, prodPkg] = await Promise.all([
     spGetItems('programaZZ'), spGetItems('programaPkg'),
     spGetItems('produccionZZ'), spGetItems('produccionPkg'),
@@ -3444,6 +3469,7 @@ const STATE = {
   spSyncMsg: null,
   dispositivosConectados: [],
   avancesZZEnCurso: {},     // {`${sku}_${fecha}`: {uds, operario, linea, hora}} — avance en vivo antes de cerrar el lote
+  ollasZZTodas: [],         // todas las ollas confirmadas (cualquier operario/dispositivo), para la card "Ollas del día" en KPIs
   role: null,
   user: null,
   currentView: null,
@@ -5075,13 +5101,13 @@ async function confirmarOlla() {
     Olla: String(numeroConfirmada),
     DetalleArtcolla: p.artcolla || '',
     RestoKg: String(resto),
-    ParafinaLote: mpParafina?.lote || '', ParafinaCantidad: String(mpParafina?.real || 0),
-    SojaLote: mpSoja?.lote || '', SojaCantidad: String(mpSoja?.real || 0),
-    EsenciaLote: mpEsencia?.lote || '', EsenciaCantidad: String(mpEsencia?.real || 0),
-    AditivoLote: mpAditivo?.lote || '', AditivoCantidad: String(mpAditivo?.real || 0),
-    FiltroLote: mpFiltro?.lote || '', FiltroCantidad: String(mpFiltro?.real || 0),
-    Anilina1Lote: mpAnilina1?.lote || '', Anilina1Cantidad: String(mpAnilina1?.real || 0),
-    Anilina2Lote: mpAnilina2?.lote || '', Anilina2Cantidad: String(mpAnilina2?.real || 0),
+    ParafinaLote: mpParafina?.lote || '', ParafinaCantidad: String(mpParafina?.real || 0), ParafinaTeorico: String(mpParafina?.teorico || 0),
+    SojaLote: mpSoja?.lote || '', SojaCantidad: String(mpSoja?.real || 0), SojaTeorico: String(mpSoja?.teorico || 0),
+    EsenciaLote: mpEsencia?.lote || '', EsenciaCantidad: String(mpEsencia?.real || 0), EsenciaTeorico: String(mpEsencia?.teorico || 0),
+    AditivoLote: mpAditivo?.lote || '', AditivoCantidad: String(mpAditivo?.real || 0), AditivoTeorico: String(mpAditivo?.teorico || 0),
+    FiltroLote: mpFiltro?.lote || '', FiltroCantidad: String(mpFiltro?.real || 0), FiltroTeorico: String(mpFiltro?.teorico || 0),
+    Anilina1Lote: mpAnilina1?.lote || '', Anilina1Cantidad: String(mpAnilina1?.real || 0), Anilina1Teorico: String(mpAnilina1?.teorico || 0),
+    Anilina2Lote: mpAnilina2?.lote || '', Anilina2Cantidad: String(mpAnilina2?.real || 0), Anilina2Teorico: String(mpAnilina2?.teorico || 0),
     KgTotalesArtcolla: kgReal.toFixed(3), TC: String(tempEsencia), SobranteKg: String(resto),
   });
   STATE.zzUltimoSyncOlla = !STATE.spConectado ? 'desconectado' : (syncOlla === null ? 'error' : 'ok');
@@ -6141,7 +6167,7 @@ function renderKPIs() {
         <label>Día</label>
         <input type="date" value="${fecha}" onchange="STATE.kpiFecha=this.value;renderView('jefe_kpi')">
       </div>
-      ${STATE.spConectado ? `<button class="btn btn-outline" style="padding:10px 16px;" onclick="cargarAvancesZZEnCurso().then(()=>renderView('jefe_kpi'))">🔄 Actualizar avance en vivo</button>` : ''}
+      ${STATE.spConectado ? `<button class="btn btn-outline" style="padding:10px 16px;" onclick="Promise.all([cargarAvancesZZEnCurso(),cargarOllasZZDesdeSharePoint()]).then(()=>renderView('jefe_kpi'))">🔄 Actualizar avance en vivo</button>` : ''}
     </div>
   </div>
   <div class="grid-4" style="margin-bottom:16px;">
@@ -6194,21 +6220,55 @@ function renderKPIs() {
     </div>
   </div>
 
-  <div class="grid-2" style="margin-bottom:16px;">
+  <div style="margin-bottom:16px;">
     <div class="card">
       <div class="card-header"><div class="card-title">Ollas del día</div></div>
       <div class="card-body">
-        <table class="tbl">
-          <thead><tr><th>Olla</th><th>SKU</th><th>Temp. mezcla</th><th>Temp. uso</th><th>Estado</th></tr></thead>
-          <tbody>
-            <tr><td class="mono">L9-01</td><td>ZZA26J</td><td class="mono" style="color:var(--green);">78°C ✓</td><td class="mono" style="color:var(--green);">85°C ✓</td><td><span class="pill pill-green">OK</span></td></tr>
-            <tr><td class="mono">L9-02</td><td>ZZA26J</td><td class="mono" style="color:var(--green);">79°C ✓</td><td class="mono" style="color:var(--green);">83°C ✓</td><td><span class="pill pill-green">OK</span></td></tr>
-            <tr><td class="mono">L9-03</td><td>ZZA26J</td><td class="mono" style="color:var(--orange);">82°C ⚠</td><td class="mono" style="color:var(--red);">92°C ⚠</td><td><span class="pill pill-red">ALERTA</span></td></tr>
-            <tr><td class="mono">L8-01</td><td>ZZA02MV</td><td class="mono" style="color:var(--green);">77°C ✓</td><td class="mono" style="color:var(--green);">84°C ✓</td><td><span class="pill pill-green">OK</span></td></tr>
-            <tr><td class="mono">L8-02</td><td>ZZA02MV</td><td class="mono" style="color:var(--green);">80°C ✓</td><td class="mono" style="color:var(--green);">86°C ✓</td><td><span class="pill pill-green">OK</span></td></tr>
-          </tbody>
-        </table>
-        <div style="font-size:11px;color:var(--text3);margin-top:8px;">Temp. mezcla = al momento de volcado de esencia (lím. 80°C) · Temp. uso = en máquina (lím. 90°C)</div>
+        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${formatFecha(fecha)}</div>
+        ${(() => {
+          const ollasDelDia = STATE.ollasZZTodas.filter(o => o.fecha === fecha).sort((a,b) => (a.sku||'').localeCompare(b.sku||'') || a.olla - b.olla);
+          if (!ollasDelDia.length) return `<div style="text-align:center;color:var(--text3);padding:20px;">Sin ollas confirmadas este día</div>`;
+          const totalOllasCache = {};
+          const totalOllasParaSku = sku => {
+            if (totalOllasCache[sku] !== undefined) return totalOllasCache[sku];
+            const p = STATE.programaZZ.find(pp => pp.sku === sku && pp.fecha === fecha);
+            let val = null;
+            if (p) {
+              const kgUniReal = calcularKgUnitarioReal(sku, p.artcolla);
+              const kgUniUsado = kgUniReal != null ? kgUniReal : p.kgUni;
+              if (kgUniUsado) val = Math.max(1, Math.ceil(p.cantidad * kgUniUsado / 45));
+            }
+            totalOllasCache[sku] = val;
+            return val;
+          };
+          return `
+          <div style="overflow-x:auto;">
+          <table class="tbl">
+            <thead><tr><th>Olla</th><th>Avance</th><th>Lote</th><th>Código Alfa</th><th>Operario</th><th>Temp. mezcla</th><th>Insumos</th></tr></thead>
+            <tbody>
+              ${ollasDelDia.map(o => {
+                const totalOllas = totalOllasParaSku(o.sku);
+                const tempOk = o.tempEsencia != null && o.tempEsencia <= 80;
+                return `<tr>
+                  <td class="mono">${o.olla}</td>
+                  <td class="mono">${o.olla}${totalOllas ? ' / ' + totalOllas : ''}</td>
+                  <td class="mono" style="font-size:11px;">${o.lote || '—'}</td>
+                  <td class="mono">${o.sku || '—'}</td>
+                  <td>${o.operario || '—'}</td>
+                  <td class="mono" style="color:${tempOk ? 'var(--green)' : 'var(--red)'};">${o.tempEsencia != null ? o.tempEsencia + '°C ' + (tempOk?'✓':'⚠') : '—'}</td>
+                  <td style="font-size:11px;line-height:1.6;">
+                    ${o.ingredientes.length === 0 ? '—' : o.ingredientes.map(ing => {
+                      const excedido = ing.teorico > 0 && ing.cantidad > ing.teorico;
+                      return `<div${excedido ? ' style="background:#fff3cd;padding:1px 5px;border-radius:4px;display:inline-block;margin:1px 0;"' : ''}>${ing.nombre}: ${ing.cantidad} kg${ing.lote ? ' (Lote ' + ing.lote + ')' : ''}</div>`;
+                    }).join('<br>')}
+                  </td>
+                </tr>`;
+              }).join('')}
+            </tbody>
+          </table>
+          </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:8px;">Temp. mezcla = al momento de volcado de esencia (lím. 80°C) · en amarillo, insumos que superaron lo indicado por fórmula</div>`;
+        })()}
       </div>
     </div>
   </div>
