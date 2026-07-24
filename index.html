@@ -847,6 +847,7 @@ async function cargarOllasZZDesdeSharePoint() {
     lote: f.Lote || null,
     olla: parseInt(f.Olla) || 0,
     tempEsencia: parseFloat(f.TC) || null,
+    kgReal: parseFloat(f.KgTotalesArtcolla) || 0,
     ingredientes: ['Parafina','Soja','Esencia','Aditivo','Filtro','Anilina1','Anilina2']
       .map(p => armarIngrediente(p, p, f)).filter(Boolean),
   }));
@@ -3812,6 +3813,7 @@ function getMenuItems() {
       {section:'Supervisión'},
       {id:'sup_liberacion', icon:'✅', label:'Liberar Líneas', badge: libBadge},
       {id:'sup_vista',      icon:'👁️', label:'Vista General'},
+      {id:'sup_avance',     icon:'🕯️', label:'Avance de Producción'},
       {section:'Análisis'},
       {id:'sup_kpi',        icon:'📊', label:'KPIs'},
       {id:'sup_pesos',      icon:ICON_PESO, label:'Control Pesos'},
@@ -3884,6 +3886,7 @@ function renderView(viewId) {
     sup_alertas:       renderSupAlertas,
     sup_liberacion:    renderSupLiberacion,
     sup_vista:         renderSupVista,
+    sup_avance:        renderAvanceProduccion,
     ver_produccion_zz: renderProduccionZZGeneral,
     sup_kpi:           renderKPIs,
     sup_pesos:         renderControlPesos,
@@ -5945,23 +5948,11 @@ function renderSupVista() {
       const col = estado === 'CERRADO' ? 'var(--green)' : estado === 'EN CURSO' ? 'var(--purple)' : 'var(--text3)';
       const operarioU = p.operarioId ? STATE.usuarios.find(o => o.id === p.operarioId) : null;
       const operarioNombre = operarioU ? operarioU.nombre + (operarioU.apellido ? ' ' + operarioU.apellido[0] + '.' : '') : 'Sin asignar';
-      // Lote y alerta de temperatura salen de las ollas confirmadas para este
-      // SKU/día (las mismas que alimentan la card "Ollas del día" en KPIs).
-      const ollasSku = STATE.ollasZZTodas.filter(o => o.sku === p.sku && o.fecha === hoy);
-      const lote = reg?.loteId || ollasSku[0]?.lote || null;
-      const alertaTemp = ollasSku.some(o => o.tempEsencia != null && o.tempEsencia > 80);
       return `<div class="card" style="margin-bottom:10px;">
         <div class="card-body" style="padding:14px 16px;">
           <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;">
-            <div>
-              <div style="font-weight:700;">${operarioNombre}</div>
-              <div style="font-size:12px;color:var(--text3);">${p.sku} · ${p.desc || ''} · ${p.linea}</div>
-              <div style="font-size:12px;color:var(--text3);">Lote: ${lote || '—'}</div>
-            </div>
-            <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;">
-              ${estadoPill(estado)}
-              ${alertaTemp ? `<span class="pill pill-red">🌡️ Alerta temp.</span>` : ''}
-            </div>
+            <div><div style="font-weight:700;">${operarioNombre}</div><div style="font-size:12px;color:var(--text3);">${p.sku} · ${p.linea}</div></div>
+            ${estadoPill(estado)}
           </div>
           <div class="progress-label"><span style="font-size:13px;">${producido.toLocaleString()} / ${p.cantidad.toLocaleString()} uni</span><span style="font-family:'Rajdhani',sans-serif;font-size:16px;font-weight:700;color:${col};">${pct}%</span></div>
           <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${col};"></div></div>
@@ -6000,10 +5991,10 @@ function renderSupVista() {
   <div class="card" style="margin-bottom:16px;">
     <div class="card-body" style="padding:14px 16px;">
       <div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">MOSTRAR ÁREAS</div>
-      <div style="display:flex;flex-wrap:wrap;gap:8px;">
+      <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));gap:8px;">
         ${AREAS_VISTA.map(a => {
           const activa = STATE.vistaGeneralAreas.includes(a.val);
-          return `<span onclick="toggleAreaVistaGeneral('${a.val}')" class="pill" style="cursor:pointer;user-select:none;background:${activa?'var(--purple)':'var(--border)'};color:${activa?'white':'var(--text3)'};font-weight:700;">${activa?'✓ ':''}${a.label}</span>`;
+          return `<span onclick="toggleAreaVistaGeneral('${a.val}')" class="pill" style="cursor:pointer;user-select:none;background:${activa?'var(--purple)':'var(--border)'};color:${activa?'white':'var(--text3)'};font-weight:700;text-align:center;padding:8px 10px;">${activa?'✓ ':''}${a.label}</span>`;
         }).join('')}
       </div>
     </div>
@@ -6027,6 +6018,112 @@ function toggleAreaVistaGeneral(area) {
     STATE.vistaGeneralAreas.push(area);
   }
   renderView('sup_vista');
+}
+
+// ── AVANCE DE PRODUCCIÓN (detalle) ──
+// A diferencia de Vista General (resumen), acá se ve todo el detalle: cada
+// línea, operario, lote, cada olla confirmada con sus insumos comparados
+// contra la fórmula, y el avance en unidades/ollas/tiradas contra lo
+// programado. Todo con datos reales de hoy (mismas fuentes que KPIs).
+function renderAvanceProduccion() {
+  const hoy = hoyLocal();
+  const progDelDia = STATE.programaZZ.filter(p => p.fecha === hoy && !/sahumerio|aceite/i.test(p.linea));
+
+  const porLinea = {};
+  progDelDia.forEach(p => { (porLinea[p.linea] = porLinea[p.linea] || []).push(p); });
+
+  const nombreCorto = u => u ? u.nombre + (u.apellido ? ' ' + u.apellido[0] + '.' : '') : null;
+  const operarioDeLinea = (linea, operarioIdProgramado) => {
+    if (operarioIdProgramado) {
+      const u = STATE.usuarios.find(o => o.id === operarioIdProgramado);
+      if (u) return nombreCorto(u);
+    }
+    const slotIds = (STATE.dotacionZZSlots?.[hoy + '|||' + linea] || []).filter(id => id > 0);
+    if (slotIds.length) return slotIds.map(id => nombreCorto(STATE.usuarios.find(o => o.id === id))).filter(Boolean).join(', ');
+    return 'Sin asignar';
+  };
+
+  const celdaInsumo = ing => {
+    const excedido = ing.teorico > 0 && ing.cantidad > ing.teorico;
+    const delta = ing.teorico > 0 ? (ing.cantidad - ing.teorico) : null;
+    const color = excedido ? 'var(--orange)' : 'inherit';
+    return `<div style="margin-bottom:4px;">
+      <span style="font-weight:700;">${ing.nombre}:</span> ${ing.cantidad} kg${ing.lote ? ` <span style="color:var(--text3);">(Lote ${ing.lote})</span>` : ''}
+      ${delta != null ? ` <span class="mono" style="color:${color};font-weight:700;">${excedido ? '+' + delta.toFixed(3) + ' kg sobre teórico' : 'dentro de fórmula'}</span>` : ''}
+    </div>`;
+  };
+
+  const bloquesLinea = Object.keys(porLinea).length === 0
+    ? `<div style="text-align:center;color:var(--text3);padding:20px;background:white;border-radius:12px;">Sin programa ZZ Velas cargado para ${formatFecha(hoy)}</div>`
+    : Object.entries(porLinea).map(([linea, filas]) => `
+    <div style="margin-bottom:24px;">
+      <div style="font-family:'Rajdhani',sans-serif;font-size:15px;font-weight:800;margin-bottom:10px;">${linea}</div>
+      ${filas.map(p => {
+        const reg = STATE.lotesZZRegistros.find(r => r.sku === p.sku && r.fecha === hoy);
+        const enCurso = STATE.avancesZZEnCurso[p.sku + '_' + hoy];
+        const producido = reg ? reg.total : (enCurso ? enCurso.uds : 0);
+        const pctUni = p.cantidad > 0 ? Math.min(100, Math.round(producido / p.cantidad * 100)) : 0;
+
+        const ollasSku = STATE.ollasZZTodas.filter(o => o.sku === p.sku && o.fecha === hoy).sort((a,b) => a.olla - b.olla);
+        const lote = reg?.loteId || ollasSku[0]?.lote || '—';
+
+        const kgUniReal = calcularKgUnitarioReal(p.sku, p.artcolla);
+        const kgUniUsado = kgUniReal != null ? kgUniReal : p.kgUni;
+        const kgTeorico = kgUniUsado ? p.cantidad * kgUniUsado : null;
+        const ollasTotal = kgTeorico ? Math.max(1, Math.ceil(kgTeorico / 45)) : null;
+        const kgUsado = ollasSku.reduce((s,o) => s + (o.kgReal || 0), 0);
+
+        const maquinas = calcularMaquinasNecesarias(p);
+        const tiradasHechas = maquinas && kgTeorico ? formatTiradasProgreso(maquinas.exacto * (kgTeorico > 0 ? kgUsado / kgTeorico : 0)) : null;
+        const tiradasTotal = maquinas ? maquinas.numero : null;
+
+        return `
+        <div class="card" style="margin-bottom:14px;">
+          <div class="card-body" style="padding:14px 16px;">
+            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px;flex-wrap:wrap;gap:8px;">
+              <div>
+                <div style="font-weight:700;">${operarioDeLinea(linea, p.operarioId)}</div>
+                <div style="font-size:12px;color:var(--text3);">${p.sku} · ${p.desc || ''}</div>
+                <div style="font-size:12px;color:var(--text3);">Lote: ${lote}</div>
+              </div>
+            </div>
+
+            <div style="display:grid;grid-template-columns:repeat(auto-fit, minmax(140px,1fr));gap:10px;margin-bottom:12px;">
+              <div style="background:var(--surface2);border-radius:8px;padding:8px 10px;">
+                <div style="font-size:10px;color:var(--text3);font-weight:700;">UNIDADES</div>
+                <div class="mono" style="font-weight:700;">${producido.toLocaleString()} / ${p.cantidad.toLocaleString()} <span style="color:var(--purple);">(${pctUni}%)</span></div>
+              </div>
+              <div style="background:var(--surface2);border-radius:8px;padding:8px 10px;">
+                <div style="font-size:10px;color:var(--text3);font-weight:700;">OLLAS</div>
+                <div class="mono" style="font-weight:700;">${ollasSku.length}${ollasTotal ? ' / ' + ollasTotal : ''}</div>
+              </div>
+              <div style="background:var(--surface2);border-radius:8px;padding:8px 10px;">
+                <div style="font-size:10px;color:var(--text3);font-weight:700;">TIRADAS</div>
+                <div class="mono" style="font-weight:700;">${tiradasHechas != null ? tiradasHechas : '—'}${tiradasTotal ? ' / ' + tiradasTotal : ''}</div>
+              </div>
+            </div>
+
+            ${ollasSku.length === 0 ? `<div style="font-size:12px;color:var(--text3);">Todavía no se confirmó ninguna olla de este lote.</div>` :
+              ollasSku.map(o => `
+              <div style="border-top:1px solid var(--border);padding-top:10px;margin-top:10px;">
+                <div style="font-weight:700;font-size:13px;margin-bottom:6px;">Olla ${o.olla}${o.tempEsencia != null ? ` · Temp: <span style="color:${o.tempEsencia<=80?'var(--green)':'var(--red)'};">${o.tempEsencia}°C ${o.tempEsencia<=80?'✓':'⚠'}</span>` : ''}</div>
+                <div style="font-size:12px;">
+                  ${o.ingredientes.length === 0 ? '—' : o.ingredientes.map(celdaInsumo).join('')}
+                </div>
+              </div>`).join('')}
+          </div>
+        </div>`;
+      }).join('')}
+    </div>`).join('');
+
+  return `
+  <div class="page-header">
+    <div class="page-title">🕯️ Avance de Producción</div>
+    <div class="page-sub">${formatFecha(hoy)} · Tiempo real</div>
+  </div>
+  <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">ZZ Semielaborado</div>
+  ${bloquesLinea}
+  `;
 }
 
 // ── KPIs ──
