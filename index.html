@@ -6987,6 +6987,21 @@ function renderAdminUsuarios() {
     <div class="page-sub">Gestión completa de usuarios · ${STATE.usuarios.length} usuarios registrados</div>
   </div>
 
+  ${renderEstadoSharePoint()}
+
+  ${STATE.spConectado && !STATE.usuarios.some(u => u._sp) ? `
+  <div class="alert alert-orange" style="margin-bottom:14px;">
+    <div class="alert-icon">⚠️</div>
+    <div class="alert-body">
+      <div class="alert-title">Todavía estás viendo los usuarios de prueba</div>
+      <div class="alert-text">Ninguno de los usuarios de esta lista está guardado en SharePoint todavía. Borrar un usuario de prueba
+      solo lo saca de esta pantalla por ahora — al recargar la página, como SharePoint sigue vacío, vuelven a aparecer todos.
+      Para que dejen de aparecer definitivamente, cargá al menos un usuario real con "+ Nuevo usuario" (estando conectada):
+      en cuanto haya un usuario real guardado en SharePoint, la próxima vez que se recargue la página se reemplaza
+      TODA esta lista por la de SharePoint, y los de prueba desaparecen solos.</div>
+    </div>
+  </div>` : ''}
+
   <div style="display:flex;justify-content:flex-end;margin-bottom:14px;">
     <button class="btn btn-primary" onclick="abrirModalNuevo()" style="font-size:14px;padding:10px 20px;">+ Nuevo usuario</button>
   </div>
