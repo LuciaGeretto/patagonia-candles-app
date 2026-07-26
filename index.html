@@ -3563,6 +3563,46 @@ const AREAS_PENDIENTES = ['sahumerio','aceite','anmat'];
 const AREAS_VACIAS = ['macerado'];
 const AREAS_PASSWORD = ['sup','plan'];
 
+// Lista compartida de áreas para los selectores "MOSTRAR ÁREAS" de Vista
+// General, KPIs, Liberar Líneas y Avance de Producción. Cada pantalla usa el
+// subconjunto que le corresponde.
+const AREAS_VISTA = [
+  {val:'vela',      label:'ZZ Velas'},
+  {val:'sahumerio', label:'ZZ Sahumerios'},
+  {val:'aceite',    label:'ZZ Aceites'},
+  {val:'macerado',  label:'Macerado'},
+  {val:'pkg',       label:'Packaging'},
+  {val:'anmat',     label:'Packaging ANMAT'},
+];
+
+// Placeholder consistente para áreas que todavía no tienen datos operativos
+// en la app (mismo texto usado en Vista General).
+function areaNoOperativaHTML(label) {
+  return `<div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;">${label}</div>
+  <div style="text-align:center;color:var(--text3);padding:14px;background:white;border-radius:12px;">Área todavía no operativa en la app (Próximamente)</div>`;
+}
+
+// Selector de áreas reutilizable: pastillas que el usuario tildea para
+// elegir qué áreas quiere ver. areasDisponibles es un subconjunto de
+// AREAS_VISTA; seleccionadas es el array de STATE con los valores activos;
+// toggleFnName es el nombre de la función global que agrega/quita un área.
+function renderFiltroAreas(areasDisponibles, seleccionadas, toggleFnName) {
+  return `
+  <div class="card" style="margin-bottom:16px;">
+    <div class="card-body" style="padding:14px 16px;">
+      <div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">MOSTRAR ÁREAS</div>
+      <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));gap:8px;">
+        ${areasDisponibles.map(a => {
+          const activa = seleccionadas.includes(a.val);
+          return `<span onclick="${toggleFnName}('${a.val}')" class="pill" style="cursor:pointer;user-select:none;background:${activa?'var(--purple)':'var(--border)'};color:${activa?'white':'var(--text3)'};font-weight:700;text-align:center;padding:8px 10px;">${activa?'✓ ':''}${a.label}</span>`;
+        }).join('')}
+      </div>
+    </div>
+  </div>`;
+}
+
+const MSG_ELEGIR_AREA = `<div style="text-align:center;color:var(--text3);padding:30px;">Elegí al menos un área arriba para ver su información</div>`;
+
 // Íconos de imagen (foto real) usados en vez de los emojis de olla/balanza,
 // para que se vean como el objeto real en toda la app.
 const ICON_OLLA = '<img src="data:image/png;base64,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" style="height:1em;width:auto;vertical-align:-0.2em;display:inline-block;" alt="olla">';
@@ -5859,14 +5899,29 @@ function renderSupAlertas() {
 }
 
 // ── SUPERVISOR LIBERACIÓN ──
+const AREAS_LIBERACION = AREAS_VISTA.filter(a => ['sahumerio','aceite','pkg','anmat'].includes(a.val));
+
 function renderSupLiberacion() {
+  if (!STATE.liberacionAreas) STATE.liberacionAreas = []; // por defecto, ninguna seleccionada
+
+  // Guardamos el índice real (dentro de STATE.liberacionesPendientes) junto a
+  // cada ítem filtrado, porque liberarLinea/rechazarLinea operan sobre ese
+  // índice original, no sobre la posición en la lista filtrada.
+  const conIndiceReal = STATE.liberacionesPendientes
+    .map((lib, idx) => ({ lib, idx }))
+    .filter(({ lib }) => STATE.liberacionAreas.includes(detectarAreaAlerta(lib.sku, lib.linea, 'pkg')));
+
   return `
   <div class="page-header">
     <div class="page-title">✅ Liberar Líneas de Packaging</div>
-    <div class="page-sub">${STATE.liberacionesPendientes.length} solicitudes pendientes</div>
+    <div class="page-sub">${formatFecha(hoyLocal())} · ${STATE.liberacionesPendientes.length} solicitudes pendientes</div>
   </div>
-  ${STATE.liberacionesPendientes.length === 0 ? `<div class="alert alert-green"><div class="alert-icon">✅</div><div class="alert-body"><div class="alert-title">Sin solicitudes pendientes</div></div></div>` :
-  STATE.liberacionesPendientes.map((lib, idx) => `
+
+  ${renderFiltroAreas(AREAS_LIBERACION, STATE.liberacionAreas, 'toggleAreaLiberacion')}
+
+  ${STATE.liberacionAreas.length === 0 ? MSG_ELEGIR_AREA :
+  conIndiceReal.length === 0 ? `<div class="alert alert-green"><div class="alert-icon">✅</div><div class="alert-body"><div class="alert-title">No hay solicitudes pendientes</div></div></div>` :
+  conIndiceReal.map(({ lib, idx }) => `
     <div class="card" style="margin-bottom:16px;">
       <div class="card-header">
         <div class="card-title">${lib.linea} — ${lib.operario}</div>
@@ -5893,6 +5948,16 @@ function renderSupLiberacion() {
         </div>
       </div>
     </div>`).join('')}`;
+}
+
+function toggleAreaLiberacion(area) {
+  if (!STATE.liberacionAreas) STATE.liberacionAreas = [];
+  if (STATE.liberacionAreas.includes(area)) {
+    STATE.liberacionAreas = STATE.liberacionAreas.filter(a => a !== area);
+  } else {
+    STATE.liberacionAreas.push(area);
+  }
+  renderView('sup_liberacion');
 }
 
 const checkStates = {};
@@ -5925,15 +5990,7 @@ function rechazarLinea(idx) {
 
 // ── SUPERVISOR VISTA GENERAL ──
 function renderSupVista() {
-  const AREAS_VISTA = [
-    {val:'vela',      label:'ZZ Velas'},
-    {val:'sahumerio', label:'ZZ Sahumerios'},
-    {val:'aceite',    label:'ZZ Aceites'},
-    {val:'macerado',  label:'Macerado'},
-    {val:'pkg',       label:'Packaging'},
-    {val:'anmat',     label:'Packaging ANMAT'},
-  ];
-  if (!STATE.vistaGeneralAreas) STATE.vistaGeneralAreas = AREAS_VISTA.map(a => a.val); // por defecto, todas seleccionadas
+  if (!STATE.vistaGeneralAreas) STATE.vistaGeneralAreas = []; // por defecto, ninguna seleccionada
   const hoy = hoyLocal();
 
   const estadoPill = (estado) => {
@@ -5994,32 +6051,18 @@ function renderSupVista() {
     return html;
   };
 
-  const renderSeccionMacerado = () => `
-    <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin:16px 0 10px;">Macerado</div>
-    <div style="text-align:center;color:var(--text3);padding:14px;background:white;border-radius:12px;">Área todavía no operativa en la app (Próximamente)</div>`;
-
   return `
   <div class="page-header"><div class="page-title">👁️ Vista General</div><div class="page-sub">${formatFecha(hoy)} · Tiempo real</div></div>
 
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-body" style="padding:14px 16px;">
-      <div style="font-size:12px;font-weight:700;color:var(--text3);margin-bottom:8px;">MOSTRAR ÁREAS</div>
-      <div style="display:grid;grid-template-columns:repeat(auto-fill, minmax(160px, 1fr));gap:8px;">
-        ${AREAS_VISTA.map(a => {
-          const activa = STATE.vistaGeneralAreas.includes(a.val);
-          return `<span onclick="toggleAreaVistaGeneral('${a.val}')" class="pill" style="cursor:pointer;user-select:none;background:${activa?'var(--purple)':'var(--border)'};color:${activa?'white':'var(--text3)'};font-weight:700;text-align:center;padding:8px 10px;">${activa?'✓ ':''}${a.label}</span>`;
-        }).join('')}
-      </div>
-    </div>
-  </div>
+  ${renderFiltroAreas(AREAS_VISTA, STATE.vistaGeneralAreas, 'toggleAreaVistaGeneral')}
 
   ${STATE.vistaGeneralAreas.includes('vela') ? renderSeccionZZ('vela', 'ZZ Velas') : ''}
   ${STATE.vistaGeneralAreas.includes('sahumerio') ? renderSeccionZZ('sahumerio', 'ZZ Sahumerios') : ''}
   ${STATE.vistaGeneralAreas.includes('aceite') ? renderSeccionZZ('aceite', 'ZZ Aceites') : ''}
-  ${STATE.vistaGeneralAreas.includes('macerado') ? renderSeccionMacerado() : ''}
+  ${STATE.vistaGeneralAreas.includes('macerado') ? areaNoOperativaHTML('Macerado') : ''}
   ${STATE.vistaGeneralAreas.includes('pkg') ? renderSeccionPkg('pkg', 'Packaging') : ''}
   ${STATE.vistaGeneralAreas.includes('anmat') ? renderSeccionPkg('anmat', 'Packaging ANMAT') : ''}
-  ${STATE.vistaGeneralAreas.length === 0 ? `<div style="text-align:center;color:var(--text3);padding:30px;">Elegí al menos un área arriba para ver su información</div>` : ''}
+  ${STATE.vistaGeneralAreas.length === 0 ? MSG_ELEGIR_AREA : ''}
   `;
 }
 
@@ -6038,7 +6081,10 @@ function toggleAreaVistaGeneral(area) {
 // línea, operario, lote, cada olla confirmada con sus insumos comparados
 // contra la fórmula, y el avance en unidades/ollas/tiradas contra lo
 // programado. Todo con datos reales de hoy (mismas fuentes que KPIs).
+const AREAS_AVANCE = AREAS_VISTA.filter(a => ['vela','sahumerio','aceite','macerado'].includes(a.val));
+
 function renderAvanceProduccion() {
+  if (!STATE.avanceAreas) STATE.avanceAreas = []; // por defecto, ninguna seleccionada
   const hoy = hoyLocal();
   const progDelDia = STATE.programaZZ.filter(p => p.fecha === hoy && !/sahumerio|aceite/i.test(p.linea));
 
@@ -6134,13 +6180,33 @@ function renderAvanceProduccion() {
     <div class="page-title">🕯️ Avance de Producción</div>
     <div class="page-sub">${formatFecha(hoy)} · Tiempo real</div>
   </div>
-  <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">ZZ Semielaborado</div>
-  ${bloquesLinea}
+
+  ${renderFiltroAreas(AREAS_AVANCE, STATE.avanceAreas, 'toggleAreaAvance')}
+
+  ${STATE.avanceAreas.length === 0 ? MSG_ELEGIR_AREA : `
+    ${STATE.avanceAreas.includes('vela') ? `
+      <div style="font-family:'Rajdhani',sans-serif;font-size:13px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:1px;margin-bottom:14px;">ZZ Semielaborado</div>
+      ${bloquesLinea}` : ''}
+    ${STATE.avanceAreas.includes('sahumerio') ? areaNoOperativaHTML('ZZ Sahumerios') : ''}
+    ${STATE.avanceAreas.includes('aceite') ? areaNoOperativaHTML('ZZ Aceites') : ''}
+    ${STATE.avanceAreas.includes('macerado') ? areaNoOperativaHTML('Macerado') : ''}
+  `}
   `;
+}
+
+function toggleAreaAvance(area) {
+  if (!STATE.avanceAreas) STATE.avanceAreas = [];
+  if (STATE.avanceAreas.includes(area)) {
+    STATE.avanceAreas = STATE.avanceAreas.filter(a => a !== area);
+  } else {
+    STATE.avanceAreas.push(area);
+  }
+  renderView('sup_avance');
 }
 
 // ── KPIs ──
 function renderKPIs() {
+  if (!STATE.kpiAreas) STATE.kpiAreas = []; // por defecto, ninguna seleccionada
   const fecha = STATE.kpiFecha || (STATE.kpiFecha = hoyLocal());
   // Lotes ZZ (Velas, Sahumerios o Aceites — cualquier área) cerrados en el día
   // elegido. Esta es la MISMA fuente que alimenta Historial/Trazabilidad, y se
@@ -6196,174 +6262,215 @@ function renderKPIs() {
       ${STATE.spConectado ? `<button class="btn btn-outline" style="padding:10px 16px;" onclick="Promise.all([cargarAvancesZZEnCurso(),cargarOllasZZDesdeSharePoint()]).then(()=>renderView('jefe_kpi'))">🔄 Actualizar avance en vivo</button>` : ''}
     </div>
   </div>
-  <div class="grid-4" style="margin-bottom:16px;">
-    <div class="kpi-card"><div class="kpi-label">Cumplimiento ZZ</div><div class="kpi-value" style="color:var(--purple);">${cumplZZ}%</div><div class="kpi-sub">${lotesZZDelDia.length} lote${lotesZZDelDia.length===1?'':'s'} cerrado${lotesZZDelDia.length===1?'':'s'} ese día</div><div class="kpi-bar" style="background:var(--purple);width:${cumplZZ}%;"></div></div>
-    <div class="kpi-card"><div class="kpi-label">Cumplimiento PT</div><div class="kpi-value" style="color:var(--green);">${cumplPT !== null ? cumplPT + '%' : '—'}</div><div class="kpi-sub">${lotesPTDelDia.length ? lotesPTDelDia.length + ' línea' + (lotesPTDelDia.length===1?'':'s') + ' confirmada' + (lotesPTDelDia.length===1?'':'s') + ' ese día' : 'Sin confirmaciones ese día'}</div><div class="kpi-bar" style="background:var(--green);width:${cumplPT || 0}%;"></div></div>
-    <div class="kpi-card"><div class="kpi-label">Rechazo PT</div><div class="kpi-value" style="color:var(--red);">${pctRechazoPT !== null ? pctRechazoPT + '%' : '—'}</div><div class="kpi-sub">${motivoPT ? 'Principal: ' + motivoPT : (lotesPTDelDia.length ? 'Sin rechazos ese día' : 'Sin confirmaciones ese día')}</div><div class="kpi-bar" style="background:var(--red);width:${pctRechazoPT || 0}%;"></div></div>
-    <div class="kpi-card"><div class="kpi-label">% Rechazo ZZ</div><div class="kpi-value" style="color:var(--red);">${pctRechazoZZ !== null ? pctRechazoZZ + '%' : '—'}</div><div class="kpi-sub">${motivoZZ ? 'Principal: ' + motivoZZ : (lotesZZDelDia.length ? 'Sin rechazos ese día' : 'Sin lotes cerrados ese día')}</div><div class="kpi-bar" style="background:var(--red);width:${pctRechazoZZ || 0}%;"></div></div>
-  </div>
 
-  <div class="card" style="margin-bottom:16px;">
-    <div class="card-header">
-      <div class="card-title">Producción ZZ por línea</div>
-      <span class="pill pill-purple">ZZ Semielaborado</span>
-    </div>
-    <div class="card-body">
-      <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Por ahora incluye solo ZZ Velas · ${formatFecha(fecha)}</div>
-      ${(() => {
-        // Por ahora, esta tabla solo muestra ZZ Velas — se excluyen las líneas
-        // de Sahumerios y Aceites hasta que Lucía pida sumarlas.
-        const progZZDelDia = STATE.programaZZ.filter(p => p.fecha === fecha && !/sahumerio|aceite/i.test(p.linea));
-        if (!progZZDelDia.length) return `<div style="text-align:center;color:var(--text3);padding:20px;">Sin programa ZZ Velas cargado para ${formatFecha(fecha)}</div>`;
-        const porLineaZZKpi = {};
-        progZZDelDia.forEach(p => { (porLineaZZKpi[p.linea] = porLineaZZKpi[p.linea] || []).push(p); });
-        const nombreCorto = u => u ? u.nombre + (u.apellido ? ' ' + u.apellido[0] + '.' : '') : null;
-        const operariosDeLinea = (linea, operarioIdProgramado) => {
-          if (operarioIdProgramado) {
-            const u = STATE.usuarios.find(o => o.id === operarioIdProgramado);
-            if (u) return nombreCorto(u);
-          }
-          const slotIds = (STATE.dotacionZZSlots?.[fecha + '|||' + linea] || []).filter(id => id > 0);
-          if (slotIds.length) return slotIds.map(id => nombreCorto(STATE.usuarios.find(o => o.id === id))).filter(Boolean).join(', ');
-          return 'Sin asignar';
-        };
-        return Object.entries(porLineaZZKpi).map(([linea, filas]) => `
-        <div style="margin-bottom:18px;">
-          <div style="font-weight:800;font-size:14px;margin-bottom:8px;">${linea}</div>
-          ${filas.map(p => {
-            const reg = STATE.lotesZZRegistros.find(r => r.sku === p.sku && r.fecha === fecha);
-            const enCurso = STATE.avancesZZEnCurso[p.sku + '_' + fecha];
-            const producido = reg ? reg.total : (enCurso ? enCurso.uds : 0);
-            const esEnCurso = !reg && !!enCurso;
-            const pct = p.cantidad > 0 ? Math.min(100, Math.round(producido / p.cantidad * 100)) : 0;
-            return `<div class="progress-wrap">
-              <div class="progress-label"><span style="font-size:12px;">${p.sku} · ${operariosDeLinea(linea, p.operarioId)}${esEnCurso ? ' <span style="color:var(--orange);font-weight:700;">● en curso</span>' : ''}</span><span style="font-family:'Rajdhani',sans-serif;font-weight:700;">${producido.toLocaleString()} / ${p.cantidad.toLocaleString()}</span></div>
-              <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${esEnCurso ? 'var(--orange)' : 'var(--purple)'};"></div></div>
-            </div>`;
-          }).join('')}
-        </div>`).join('');
-      })()}
-    </div>
-  </div>
+  ${renderFiltroAreas(AREAS_VISTA, STATE.kpiAreas, 'toggleAreaKPI')}
 
-  <div style="margin-bottom:16px;">
-    <div class="card">
-      <div class="card-header"><div class="card-title">Ollas del día</div></div>
-      <div class="card-body">
-        <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${formatFecha(fecha)}</div>
-        ${(() => {
-          const ollasDelDia = STATE.ollasZZTodas.filter(o => o.fecha === fecha).sort((a,b) => (a.sku||'').localeCompare(b.sku||'') || a.olla - b.olla);
-          if (!ollasDelDia.length) return `<div style="text-align:center;color:var(--text3);padding:20px;">Sin ollas confirmadas este día</div>`;
-          const totalOllasCache = {};
-          const totalOllasParaSku = sku => {
-            if (totalOllasCache[sku] !== undefined) return totalOllasCache[sku];
-            const p = STATE.programaZZ.find(pp => pp.sku === sku && pp.fecha === fecha);
-            let val = null;
-            if (p) {
-              const kgUniReal = calcularKgUnitarioReal(sku, p.artcolla);
-              const kgUniUsado = kgUniReal != null ? kgUniReal : p.kgUni;
-              if (kgUniUsado) val = Math.max(1, Math.ceil(p.cantidad * kgUniUsado / 45));
-            }
-            totalOllasCache[sku] = val;
-            return val;
-          };
-          return `
-          <div style="overflow-x:auto;">
-          <table class="tbl">
-            <thead><tr><th>Olla</th><th>Avance</th><th>Lote</th><th>Código Alfa</th><th>Operario</th><th>Temp. mezcla</th><th>Parafina</th><th>Soja</th><th>Esencia</th><th>Aditivo</th><th>Filtro</th><th>Anilina 1</th><th>Anilina 2</th></tr></thead>
-            <tbody>
-              ${ollasDelDia.map(o => {
-                const totalOllas = totalOllasParaSku(o.sku);
-                const tempOk = o.tempEsencia != null && o.tempEsencia <= 80;
-                const porTipo = {};
-                o.ingredientes.forEach(ing => { porTipo[ing.nombre] = ing; });
-                const celdaInsumo = ing => {
-                  if (!ing) return `<span style="color:var(--text3);">—</span>`;
-                  const excedido = ing.teorico > 0 && ing.cantidad > ing.teorico;
-                  const color = ing.teorico > 0 ? (excedido ? 'var(--orange)' : 'var(--green)') : 'inherit';
-                  const icono = ing.teorico > 0 ? (excedido ? ' ⚠' : ' ✓') : '';
-                  return `<span class="mono" style="color:${color};">${ing.cantidad} kg${icono}</span>${ing.lote ? '<br><span style="font-size:10px;color:var(--text3);">Lote ' + ing.lote + '</span>' : ''}`;
-                };
-                return `<tr>
-                  <td class="mono">${o.olla}</td>
-                  <td class="mono">${o.olla}${totalOllas ? ' / ' + totalOllas : ''}</td>
-                  <td class="mono" style="font-size:11px;">${o.lote || '—'}</td>
-                  <td class="mono">${o.sku || '—'}</td>
-                  <td>${o.operario || '—'}</td>
-                  <td class="mono" style="color:${tempOk ? 'var(--green)' : 'var(--red)'};">${o.tempEsencia != null ? o.tempEsencia + '°C ' + (tempOk?'✓':'⚠') : '—'}</td>
-                  <td style="font-size:11px;">${celdaInsumo(porTipo['Parafina'])}</td>
-                  <td style="font-size:11px;">${celdaInsumo(porTipo['Soja'])}</td>
-                  <td style="font-size:11px;">${celdaInsumo(porTipo['Esencia'])}</td>
-                  <td style="font-size:11px;">${celdaInsumo(porTipo['Aditivo'])}</td>
-                  <td style="font-size:11px;">${celdaInsumo(porTipo['Filtro'])}</td>
-                  <td style="font-size:11px;">${celdaInsumo(porTipo['Anilina1'])}</td>
-                  <td style="font-size:11px;">${celdaInsumo(porTipo['Anilina2'])}</td>
-                </tr>`;
+  ${STATE.kpiAreas.length === 0 ? MSG_ELEGIR_AREA : (() => {
+    const muestraVela = STATE.kpiAreas.includes('vela');
+    const muestraPT = STATE.kpiAreas.includes('pkg') || STATE.kpiAreas.includes('anmat');
+    const tarjetas = [
+      muestraVela ? `<div class="kpi-card"><div class="kpi-label">Cumplimiento ZZ</div><div class="kpi-value" style="color:var(--purple);">${cumplZZ}%</div><div class="kpi-sub">${lotesZZDelDia.length} lote${lotesZZDelDia.length===1?'':'s'} cerrado${lotesZZDelDia.length===1?'':'s'} ese día</div><div class="kpi-bar" style="background:var(--purple);width:${cumplZZ}%;"></div></div>` : '',
+      muestraVela ? `<div class="kpi-card"><div class="kpi-label">% Rechazo ZZ</div><div class="kpi-value" style="color:var(--red);">${pctRechazoZZ !== null ? pctRechazoZZ + '%' : '—'}</div><div class="kpi-sub">${motivoZZ ? 'Principal: ' + motivoZZ : (lotesZZDelDia.length ? 'Sin rechazos ese día' : 'Sin lotes cerrados ese día')}</div><div class="kpi-bar" style="background:var(--red);width:${pctRechazoZZ || 0}%;"></div></div>` : '',
+      muestraPT ? `<div class="kpi-card"><div class="kpi-label">Cumplimiento PT</div><div class="kpi-value" style="color:var(--green);">${cumplPT !== null ? cumplPT + '%' : '—'}</div><div class="kpi-sub">${lotesPTDelDia.length ? lotesPTDelDia.length + ' línea' + (lotesPTDelDia.length===1?'':'s') + ' confirmada' + (lotesPTDelDia.length===1?'':'s') + ' ese día' : 'Sin confirmaciones ese día'}</div><div class="kpi-bar" style="background:var(--green);width:${cumplPT || 0}%;"></div></div>` : '',
+      muestraPT ? `<div class="kpi-card"><div class="kpi-label">Rechazo PT</div><div class="kpi-value" style="color:var(--red);">${pctRechazoPT !== null ? pctRechazoPT + '%' : '—'}</div><div class="kpi-sub">${motivoPT ? 'Principal: ' + motivoPT : (lotesPTDelDia.length ? 'Sin rechazos ese día' : 'Sin confirmaciones ese día')}</div><div class="kpi-bar" style="background:var(--red);width:${pctRechazoPT || 0}%;"></div></div>` : '',
+    ].filter(Boolean);
+    const gridClass = tarjetas.length <= 2 ? 'grid-2' : 'grid-4';
+
+    const bloqueVela = !muestraVela ? '' : `
+      <div class="card" style="margin-bottom:16px;">
+        <div class="card-header">
+          <div class="card-title">Producción ZZ por línea</div>
+          <span class="pill pill-purple">ZZ Semielaborado</span>
+        </div>
+        <div class="card-body">
+          <div style="font-size:12px;color:var(--text3);margin-bottom:12px;">Por ahora incluye solo ZZ Velas · ${formatFecha(fecha)}</div>
+          ${(() => {
+            // Por ahora, esta tabla solo muestra ZZ Velas — se excluyen las líneas
+            // de Sahumerios y Aceites hasta que Lucía pida sumarlas.
+            const progZZDelDia = STATE.programaZZ.filter(p => p.fecha === fecha && !/sahumerio|aceite/i.test(p.linea));
+            if (!progZZDelDia.length) return `<div style="text-align:center;color:var(--text3);padding:20px;">Sin programa ZZ Velas cargado para ${formatFecha(fecha)}</div>`;
+            const porLineaZZKpi = {};
+            progZZDelDia.forEach(p => { (porLineaZZKpi[p.linea] = porLineaZZKpi[p.linea] || []).push(p); });
+            const nombreCorto = u => u ? u.nombre + (u.apellido ? ' ' + u.apellido[0] + '.' : '') : null;
+            const operariosDeLinea = (linea, operarioIdProgramado) => {
+              if (operarioIdProgramado) {
+                const u = STATE.usuarios.find(o => o.id === operarioIdProgramado);
+                if (u) return nombreCorto(u);
+              }
+              const slotIds = (STATE.dotacionZZSlots?.[fecha + '|||' + linea] || []).filter(id => id > 0);
+              if (slotIds.length) return slotIds.map(id => nombreCorto(STATE.usuarios.find(o => o.id === id))).filter(Boolean).join(', ');
+              return 'Sin asignar';
+            };
+            return Object.entries(porLineaZZKpi).map(([linea, filas]) => `
+            <div style="margin-bottom:18px;">
+              <div style="font-weight:800;font-size:14px;margin-bottom:8px;">${linea}</div>
+              ${filas.map(p => {
+                const reg = STATE.lotesZZRegistros.find(r => r.sku === p.sku && r.fecha === fecha);
+                const enCurso = STATE.avancesZZEnCurso[p.sku + '_' + fecha];
+                const producido = reg ? reg.total : (enCurso ? enCurso.uds : 0);
+                const esEnCurso = !reg && !!enCurso;
+                const pct = p.cantidad > 0 ? Math.min(100, Math.round(producido / p.cantidad * 100)) : 0;
+                return `<div class="progress-wrap">
+                  <div class="progress-label"><span style="font-size:12px;">${p.sku} · ${operariosDeLinea(linea, p.operarioId)}${esEnCurso ? ' <span style="color:var(--orange);font-weight:700;">● en curso</span>' : ''}</span><span style="font-family:'Rajdhani',sans-serif;font-weight:700;">${producido.toLocaleString()} / ${p.cantidad.toLocaleString()}</span></div>
+                  <div class="progress-bar"><div class="progress-fill" style="width:${pct}%;background:${esEnCurso ? 'var(--orange)' : 'var(--purple)'};"></div></div>
+                </div>`;
               }).join('')}
+            </div>`).join('');
+          })()}
+        </div>
+      </div>
+
+      <div style="margin-bottom:16px;">
+        <div class="card">
+          <div class="card-header"><div class="card-title">Ollas del día</div></div>
+          <div class="card-body">
+            <div style="font-size:11px;color:var(--text3);margin-bottom:8px;">${formatFecha(fecha)}</div>
+            ${(() => {
+              const ollasDelDia = STATE.ollasZZTodas.filter(o => o.fecha === fecha).sort((a,b) => (a.sku||'').localeCompare(b.sku||'') || a.olla - b.olla);
+              if (!ollasDelDia.length) return `<div style="text-align:center;color:var(--text3);padding:20px;">Sin ollas confirmadas este día</div>`;
+              const totalOllasCache = {};
+              const totalOllasParaSku = sku => {
+                if (totalOllasCache[sku] !== undefined) return totalOllasCache[sku];
+                const p = STATE.programaZZ.find(pp => pp.sku === sku && pp.fecha === fecha);
+                let val = null;
+                if (p) {
+                  const kgUniReal = calcularKgUnitarioReal(sku, p.artcolla);
+                  const kgUniUsado = kgUniReal != null ? kgUniReal : p.kgUni;
+                  if (kgUniUsado) val = Math.max(1, Math.ceil(p.cantidad * kgUniUsado / 45));
+                }
+                totalOllasCache[sku] = val;
+                return val;
+              };
+              return `
+              <div style="overflow-x:auto;">
+              <table class="tbl">
+                <thead><tr><th>Olla</th><th>Avance</th><th>Lote</th><th>Código Alfa</th><th>Operario</th><th>Temp. mezcla</th><th>Parafina</th><th>Soja</th><th>Esencia</th><th>Aditivo</th><th>Filtro</th><th>Anilina 1</th><th>Anilina 2</th></tr></thead>
+                <tbody>
+                  ${ollasDelDia.map(o => {
+                    const totalOllas = totalOllasParaSku(o.sku);
+                    const tempOk = o.tempEsencia != null && o.tempEsencia <= 80;
+                    const porTipo = {};
+                    o.ingredientes.forEach(ing => { porTipo[ing.nombre] = ing; });
+                    const celdaInsumo = ing => {
+                      if (!ing) return `<span style="color:var(--text3);">—</span>`;
+                      const excedido = ing.teorico > 0 && ing.cantidad > ing.teorico;
+                      const color = ing.teorico > 0 ? (excedido ? 'var(--orange)' : 'var(--green)') : 'inherit';
+                      const icono = ing.teorico > 0 ? (excedido ? ' ⚠' : ' ✓') : '';
+                      return `<span class="mono" style="color:${color};">${ing.cantidad} kg${icono}</span>${ing.lote ? '<br><span style="font-size:10px;color:var(--text3);">Lote ' + ing.lote + '</span>' : ''}`;
+                    };
+                    return `<tr>
+                      <td class="mono">${o.olla}</td>
+                      <td class="mono">${o.olla}${totalOllas ? ' / ' + totalOllas : ''}</td>
+                      <td class="mono" style="font-size:11px;">${o.lote || '—'}</td>
+                      <td class="mono">${o.sku || '—'}</td>
+                      <td>${o.operario || '—'}</td>
+                      <td class="mono" style="color:${tempOk ? 'var(--green)' : 'var(--red)'};">${o.tempEsencia != null ? o.tempEsencia + '°C ' + (tempOk?'✓':'⚠') : '—'}</td>
+                      <td style="font-size:11px;">${celdaInsumo(porTipo['Parafina'])}</td>
+                      <td style="font-size:11px;">${celdaInsumo(porTipo['Soja'])}</td>
+                      <td style="font-size:11px;">${celdaInsumo(porTipo['Esencia'])}</td>
+                      <td style="font-size:11px;">${celdaInsumo(porTipo['Aditivo'])}</td>
+                      <td style="font-size:11px;">${celdaInsumo(porTipo['Filtro'])}</td>
+                      <td style="font-size:11px;">${celdaInsumo(porTipo['Anilina1'])}</td>
+                      <td style="font-size:11px;">${celdaInsumo(porTipo['Anilina2'])}</td>
+                    </tr>`;
+                  }).join('')}
+                </tbody>
+              </table>
+              </div>
+              <div style="font-size:11px;color:var(--text3);margin-top:8px;">Temp. mezcla = al momento de volcado de esencia (lím. 80°C) · en amarillo con ⚠, insumos que superaron lo indicado por fórmula (dentro de la tolerancia ya validada al confirmar la olla) · en verde con ✓, dentro de lo indicado</div>`;
+            })()}
+          </div>
+        </div>
+      </div>
+
+      <!-- KPI NUEVO: Unidades por minuto -->
+      <div class="card">
+        <div class="card-header">
+          <div class="card-title">⚡ Productividad — Unidades por Minuto</div>
+          <span class="pill pill-orange">ZZ Semielaborado</span>
+        </div>
+        <div class="card-body">
+          <div class="grid-3" style="margin-bottom:14px;">
+            <div class="kpi-card" style="background:var(--purple-light);border:1px solid rgba(109,63,160,.2);">
+              <div class="kpi-label">Total planta (promedio)</div>
+              <div class="kpi-value" style="color:var(--purple);font-size:28px;">2.34</div>
+              <div class="kpi-sub">uni / minuto · todas las líneas</div>
+            </div>
+            <div class="kpi-card" style="background:var(--green-light);border:1px solid rgba(45,138,94,.2);">
+              <div class="kpi-label">Mejor línea hoy</div>
+              <div class="kpi-value" style="color:var(--green);font-size:28px;">3.12</div>
+              <div class="kpi-sub">L3 Velitas · Fernández P.</div>
+            </div>
+            <div class="kpi-card" style="background:var(--orange-light);border:1px solid rgba(201,106,26,.2);">
+              <div class="kpi-label">Línea más baja</div>
+              <div class="kpi-value" style="color:var(--orange);font-size:28px;">1.63</div>
+              <div class="kpi-sub">L9 Shaofeng · González L.</div>
+            </div>
+          </div>
+          <table class="tbl">
+            <thead>
+              <tr><th>Línea</th><th>Operario</th><th>SKU</th><th>Producido</th><th>Minutos</th><th>Uni/min</th><th>vs. ayer</th></tr>
+            </thead>
+            <tbody>
+              <tr>
+                <td>L9 · Shaofeng</td><td>González L.</td><td class="mono">ZZA26J</td>
+                <td class="mono">940</td><td class="mono">576</td>
+                <td class="mono" style="color:var(--orange);font-weight:700;">1.63</td>
+                <td class="mono" style="color:var(--red);">▼ -8%</td>
+              </tr>
+              <tr>
+                <td>L8 · Mesa Molde</td><td>Martínez R.</td><td class="mono">ZZA02MV</td>
+                <td class="mono">887</td><td class="mono">405</td>
+                <td class="mono" style="color:var(--purple);font-weight:700;">2.19</td>
+                <td class="mono" style="color:var(--green);">▲ +3%</td>
+              </tr>
+              <tr>
+                <td>L3 · Velitas</td><td>Fernández P.</td><td class="mono">ZZA32BR</td>
+                <td class="mono">7.200</td><td class="mono">2.308</td>
+                <td class="mono" style="color:var(--green);font-weight:700;">3.12</td>
+                <td class="mono" style="color:var(--green);">▲ +5%</td>
+              </tr>
             </tbody>
           </table>
-          </div>
-          <div style="font-size:11px;color:var(--text3);margin-top:8px;">Temp. mezcla = al momento de volcado de esencia (lím. 80°C) · en amarillo con ⚠, insumos que superaron lo indicado por fórmula (dentro de la tolerancia ya validada al confirmar la olla) · en verde con ✓, dentro de lo indicado</div>`;
-        })()}
-      </div>
-    </div>
-  </div>
+          <div style="font-size:11px;color:var(--text3);margin-top:8px;">Minutos = desde primera olla preparada hasta cierre de lote · Uni/min = producidas netas (sin rechazos)</div>
+        </div>
+      </div>`;
 
-  <!-- KPI NUEVO: Unidades por minuto -->
-  <div class="card">
-    <div class="card-header">
-      <div class="card-title">⚡ Productividad — Unidades por Minuto</div>
-      <span class="pill pill-orange">ZZ Semielaborado</span>
-    </div>
-    <div class="card-body">
-      <div class="grid-3" style="margin-bottom:14px;">
-        <div class="kpi-card" style="background:var(--purple-light);border:1px solid rgba(109,63,160,.2);">
-          <div class="kpi-label">Total planta (promedio)</div>
-          <div class="kpi-value" style="color:var(--purple);font-size:28px;">2.34</div>
-          <div class="kpi-sub">uni / minuto · todas las líneas</div>
-        </div>
-        <div class="kpi-card" style="background:var(--green-light);border:1px solid rgba(45,138,94,.2);">
-          <div class="kpi-label">Mejor línea hoy</div>
-          <div class="kpi-value" style="color:var(--green);font-size:28px;">3.12</div>
-          <div class="kpi-sub">L3 Velitas · Fernández P.</div>
-        </div>
-        <div class="kpi-card" style="background:var(--orange-light);border:1px solid rgba(201,106,26,.2);">
-          <div class="kpi-label">Línea más baja</div>
-          <div class="kpi-value" style="color:var(--orange);font-size:28px;">1.63</div>
-          <div class="kpi-sub">L9 Shaofeng · González L.</div>
-        </div>
-      </div>
-      <table class="tbl">
-        <thead>
-          <tr><th>Línea</th><th>Operario</th><th>SKU</th><th>Producido</th><th>Minutos</th><th>Uni/min</th><th>vs. ayer</th></tr>
-        </thead>
-        <tbody>
-          <tr>
-            <td>L9 · Shaofeng</td><td>González L.</td><td class="mono">ZZA26J</td>
-            <td class="mono">940</td><td class="mono">576</td>
-            <td class="mono" style="color:var(--orange);font-weight:700;">1.63</td>
-            <td class="mono" style="color:var(--red);">▼ -8%</td>
-          </tr>
-          <tr>
-            <td>L8 · Mesa Molde</td><td>Martínez R.</td><td class="mono">ZZA02MV</td>
-            <td class="mono">887</td><td class="mono">405</td>
-            <td class="mono" style="color:var(--purple);font-weight:700;">2.19</td>
-            <td class="mono" style="color:var(--green);">▲ +3%</td>
-          </tr>
-          <tr>
-            <td>L3 · Velitas</td><td>Fernández P.</td><td class="mono">ZZA32BR</td>
-            <td class="mono">7.200</td><td class="mono">2.308</td>
-            <td class="mono" style="color:var(--green);font-weight:700;">3.12</td>
-            <td class="mono" style="color:var(--green);">▲ +5%</td>
-          </tr>
-        </tbody>
-      </table>
-      <div style="font-size:11px;color:var(--text3);margin-top:8px;">Minutos = desde primera olla preparada hasta cierre de lote · Uni/min = producidas netas (sin rechazos)</div>
-    </div>
-  </div>`;
+    return `
+    ${tarjetas.length ? `<div class="${gridClass}" style="margin-bottom:16px;">${tarjetas.join('')}</div>` : ''}
+    ${bloqueVela}
+    ${STATE.kpiAreas.includes('sahumerio') ? areaNoOperativaHTML('ZZ Sahumerios') : ''}
+    ${STATE.kpiAreas.includes('aceite') ? areaNoOperativaHTML('ZZ Aceites') : ''}
+    ${STATE.kpiAreas.includes('macerado') ? areaNoOperativaHTML('Macerado') : ''}
+    `;
+  })()}
+  `;
+}
+
+function toggleAreaKPI(area) {
+  if (!STATE.kpiAreas) STATE.kpiAreas = [];
+  if (STATE.kpiAreas.includes(area)) {
+    STATE.kpiAreas = STATE.kpiAreas.filter(a => a !== area);
+  } else {
+    STATE.kpiAreas.push(area);
+  }
+  renderView('jefe_kpi');
 }
 
 // ── CONTROL PESOS ──
+// Dado un SKU, devuelve el código alfa (ARTCOLLA) real, su detalle
+// (nombre de la esencia de fórmula) y el lote de esencia vigente asociado
+// —mismo criterio que se usa en toda la app para vincular ARTCOLLA → esencia
+// (ESENCIA_POR_ARTCOLLA) y esencia → lote (STATE.lotesMP, tipo Esencia).
+function infoCodigoAlfa(sku) {
+  const artcolla = (SKU_A_ARTCOLLA[sku] && SKU_A_ARTCOLLA[sku].artcolla) || sku;
+  const esencias = ESENCIA_POR_ARTCOLLA[artcolla] || [];
+  const detalle = esencias.length ? esencias.map(e => e.nombre).join(' + ') : '—';
+  const loteInfo = esencias.map(e => STATE.lotesMP.find(l => l.codigo === e.codigo && l.tipo === 'Esencia')).find(Boolean);
+  const lote = loteInfo ? loteInfo.lote : '—';
+  return { artcolla, detalle, lote };
+}
+
 function renderControlPesos() {
   const filtroFecha = STATE.pesoFiltroFecha || '2025-05-20';
   const filtroSku = STATE.pesoFiltroSku || '';
@@ -6374,7 +6481,7 @@ function renderControlPesos() {
   );
 
   return `
-  <div class="page-header"><div class="page-title">${ICON_PESO} Control Estadístico de Pesos</div><div class="page-sub">Por SKU y lote de MP</div></div>
+  <div class="page-header"><div class="page-title">${ICON_PESO} Control Estadístico de Pesos</div><div class="page-sub">Por código alfa y lote de código alfa</div></div>
   <div class="card" style="margin-bottom:14px;">
     <div class="card-body" style="padding:14px 16px;">
       <div class="field-row" style="margin-bottom:0;">
@@ -6383,10 +6490,10 @@ function renderControlPesos() {
           <input type="date" value="${filtroFecha}" onchange="STATE.pesoFiltroFecha=this.value;renderView('${STATE.currentView}')">
         </div>
         <div class="field" style="margin-bottom:0;">
-          <label>Filtrar por SKU</label>
+          <label>Filtrar por código alfa</label>
           <select onchange="STATE.pesoFiltroSku=this.value;renderView('${STATE.currentView}')">
-            <option value="">— Todos los SKUs</option>
-            ${skusDisp.map(s => `<option value="${s}" ${s===filtroSku?'selected':''}>${s}</option>`).join('')}
+            <option value="">— Todos los códigos alfa</option>
+            ${skusDisp.map(s => `<option value="${s}" ${s===filtroSku?'selected':''}>${infoCodigoAlfa(s).artcolla} (${s})</option>`).join('')}
           </select>
         </div>
         <div class="field" style="margin-bottom:0;align-self:flex-end;">
@@ -6397,25 +6504,26 @@ function renderControlPesos() {
   </div>
   <div class="card">
     <div class="card-header">
-      <div class="card-title">Mediciones${filtroFecha?' · '+formatFecha(filtroFecha):''}${filtroSku?' · '+filtroSku:''}</div>
+      <div class="card-title">Mediciones${filtroFecha?' · '+formatFecha(filtroFecha):''}${filtroSku?' · '+infoCodigoAlfa(filtroSku).artcolla:''}</div>
       <span class="pill pill-purple">${datos.length} mediciones</span>
     </div>
     <div class="card-body">
       ${datos.length === 0 ? `<div style="text-align:center;color:var(--text3);padding:20px;">Sin mediciones para los filtros seleccionados</div>` : `
       <table class="tbl">
-        <thead><tr><th>Fecha</th><th>SKU</th><th>@ Uni</th><th>Peso (g)</th><th>Teórico (g)</th><th>Desvío</th><th>Lote MP</th><th>Operario</th></tr></thead>
+        <thead><tr><th>Fecha</th><th>Código Alfa</th><th>Detalle Código Alfa</th><th>Peso (g)</th><th>Teórico (g)</th><th>Desvío</th><th>Lote Código Alfa</th><th>Operario</th></tr></thead>
         <tbody>
           ${datos.map(pr => {
             const teo = STATE.programaZZ.find(p=>p.sku===pr.sku)?.kgUni*1000||0;
             const devCol = Math.abs(pr.dev) < 1 ? 'var(--green)' : Math.abs(pr.dev) < 2 ? 'var(--orange)' : 'var(--red)';
+            const info = infoCodigoAlfa(pr.sku);
             return `<tr>
               <td>${pr.fecha}</td>
-              <td class="mono">${pr.sku}</td>
-              <td class="mono">${pr.uni}</td>
+              <td class="mono">${info.artcolla}</td>
+              <td style="font-size:12px;">${info.detalle}</td>
               <td class="mono" style="font-weight:700;">${pr.peso}</td>
               <td class="mono" style="color:var(--text3);">${teo.toFixed(1)}</td>
               <td class="mono" style="color:${devCol};font-weight:700;">${pr.dev>=0?'+':''}${pr.dev.toFixed(1)}%</td>
-              <td class="mono" style="font-size:11px;">${pr.lote}</td>
+              <td class="mono" style="font-size:11px;">${info.lote}</td>
               <td style="font-size:12px;color:var(--text3);">Martínez R.</td>
             </tr>`;}).join('')}
         </tbody>
