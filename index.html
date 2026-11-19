@@ -464,9 +464,32 @@ let graphAccount = null;
 let spSiteId = null;
 const spListIds = {};
 
+// ── Login Microsoft en celulares ──
+// En celulares el "popup" de Microsoft se abre como otra pestaña, y al volver
+// carga la app entera adentro de esa pestaña; si ahí se toca "Conectar" otra
+// vez, MSAL tira "block_nested_popups". Por eso:
+//  · en celulares (o si la página está abierta como popup) se usa REDIRECCIÓN
+//    en vez de popup: la página va a Microsoft y vuelve sola;
+//  · si esta página es la ventana popup de MSAL, no se arranca la app.
+const ES_POPUP_MSAL = (() => {
+  try { return !!window.opener && window.opener !== window && /^msal\./i.test(window.name || ''); }
+  catch (e) { return false; }
+})();
+function usarRedirectMsal() {
+  return ES_POPUP_MSAL || /Android|iPhone|iPad|iPod|Mobile|Silk|Opera Mini/i.test(navigator.userAgent || '');
+}
+let msalInitPromise = null;
+let msalRedirectResultado = null; // cuenta que volvió de Microsoft por redirección (si hubo)
+
 async function initMsal() {
   if (!spConfigured() || !window.msal) return false;
-  if (msalInstance) return true;
+  if (ES_POPUP_MSAL) return false; // la ventana popup no debe iniciar MSAL por su cuenta
+  if (msalInitPromise) { await msalInitPromise; return !!msalInstance; }
+  msalInitPromise = initMsalInterno();
+  await msalInitPromise;
+  return !!msalInstance;
+}
+async function initMsalInterno() {
   msalInstance = new msal.PublicClientApplication({
     auth: {
       clientId: SP_CONFIG.clientId,
@@ -478,7 +501,18 @@ async function initMsal() {
   // Requisito de msal-browser v3: hay que inicializar antes de usar cualquier
   // otra API (loginPopup, acquireTokenSilent, etc.) o tira "uninitialized_public_client_application".
   await msalInstance.initialize();
-  return true;
+  // Si venimos de vuelta de Microsoft (login por redirección), procesar la respuesta.
+  try {
+    const r = await msalInstance.handleRedirectPromise();
+    if (r && r.account) {
+      msalRedirectResultado = r.account;
+      graphAccount = r.account;
+      msalInstance.setActiveAccount(r.account);
+    }
+  } catch (e) {
+    console.error('Error procesando la vuelta del login de Microsoft:', e);
+    alert('No se pudo completar la conexión con Microsoft: ' + (e.message || e));
+  }
 }
 
 async function conectarSharePoint() {
@@ -486,7 +520,20 @@ async function conectarSharePoint() {
     alert('Falta configurar SP_CONFIG (tenantId / clientId / sitio) en el código. Consultá con IT — ver instructivo.');
     return;
   }
+  if (ES_POPUP_MSAL) { alert('Esta pestaña es la ventana de inicio de sesión. Cerrala y volvé a la pestaña original de la app.'); return; }
   if (!(await initMsal())) { alert('No se pudo cargar MSAL (revisá conexión a internet).'); return; }
+  if (usarRedirectMsal()) {
+    // Celular: ir a Microsoft y volver. Al volver, entrá con tu usuario y la
+    // app se reconecta sola (ver intentarReconectarSharePoint).
+    try {
+      sessionStorage.setItem('pcaLoginRedirect', '1');
+      await msalInstance.loginRedirect({ scopes: SP_CONFIG.scopes, prompt: 'select_account' });
+    } catch (e) {
+      console.error(e);
+      alert('No se pudo conectar con Microsoft: ' + (e.message || e));
+    }
+    return;
+  }
   try {
     const res = await msalInstance.loginPopup({ scopes: SP_CONFIG.scopes });
     graphAccount = res.account;
@@ -584,6 +631,11 @@ async function getGraphToken() {
     const res = await msalInstance.acquireTokenSilent({ scopes: SP_CONFIG.scopes, account: graphAccount });
     return res.accessToken;
   } catch (e) {
+    if (usarRedirectMsal()) {
+      // En celular no se abre popup: hay que volver a tocar "Conectar con Microsoft".
+      console.error('Sesión de Microsoft vencida en este celular — reconectá desde "Subir Programa".', e);
+      return null;
+    }
     try {
       const res = await msalInstance.acquireTokenPopup({ scopes: SP_CONFIG.scopes });
       return res.accessToken;
@@ -3640,6 +3692,34 @@ function mostrarLoginUnico() {
   setTimeout(() => document.getElementById('loginUser').focus(), 100);
 }
 
+// Arranque: si esta pestaña es el popup de Microsoft, no mostrar la app.
+// Si volvemos de Microsoft por redirección, avisar en la pantalla de ingreso.
+(function arranqueMsal() {
+  const correr = () => {
+    if (ES_POPUP_MSAL) {
+      document.body.innerHTML = `<div style="font-family:sans-serif;padding:40px 24px;text-align:center;">
+        <div style="font-size:42px;">🔐</div>
+        <div style="font-size:20px;font-weight:700;margin:12px 0;">Conectando con Microsoft…</div>
+        <div style="font-size:15px;color:#555;">Esta ventana se cierra sola. Si no se cierra, cerrala y volvé a la pestaña de la app.</div>
+        <button onclick="window.close()" style="margin-top:20px;padding:12px 20px;font-size:16px;border-radius:8px;border:none;background:#222;color:white;">Cerrar</button>
+      </div>`;
+      return;
+    }
+    initMsal().then(() => {
+      if (!msalRedirectResultado) return;
+      const login = document.getElementById('loginScreen');
+      if (!login) return;
+      const aviso = document.createElement('div');
+      aviso.style.cssText = 'position:fixed;top:12px;left:50%;transform:translateX(-50%);z-index:9999;background:#2d8a5e;color:white;padding:12px 18px;border-radius:10px;font:600 15px sans-serif;box-shadow:0 4px 16px rgba(0,0,0,.2);max-width:92vw;text-align:center;';
+      aviso.textContent = '✅ Conectado con Microsoft (' + (msalRedirectResultado.username || '') + '). Ingresá con tu usuario.';
+      document.body.appendChild(aviso);
+      setTimeout(() => aviso.remove(), 7000);
+    });
+  };
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', correr);
+  else correr();
+})();
+
 function volverAStepLogin() {
   document.getElementById('stepAreaOperario').style.display = 'none';
   mostrarLoginUnico();
@@ -3763,13 +3843,15 @@ async function intentarReconectarSharePoint() {
   if (!(await initMsal())) return;
   const cuentas = msalInstance.getAllAccounts();
   if (cuentas.length === 0) return;
+  const vieneDeLogin = sessionStorage.getItem('pcaLoginRedirect') === '1';
   try {
-    const res = await msalInstance.acquireTokenSilent({ scopes: SP_CONFIG.scopes, account: cuentas[0] });
+    const res = await msalInstance.acquireTokenSilent({ scopes: SP_CONFIG.scopes, account: msalRedirectResultado || cuentas[0] });
     graphAccount = res.account;
     STATE.spConectado = true;
     STATE.spSyncMsg = 'Sincronizando historial…';
     renderView(STATE.currentView);
     await cargarHistorialDesdeSharePoint();
+    if (vieneDeLogin) { sessionStorage.removeItem('pcaLoginRedirect'); await registrarDispositivoConectado(); }
     STATE.spSyncMsg = null;
     iniciarPollingLotesMP();
   } catch (e) {
